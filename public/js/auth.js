@@ -111,8 +111,8 @@
       .then(startSession);
   }
 
-  function login(identifier, password) {
-    return request('/api/auth/login', { method: 'POST', body: { identifier: identifier, password: password } })
+  function login(email, password) {
+    return request('/api/auth/login', { method: 'POST', body: { email: email, password: password } })
       .then(startSession);
   }
 

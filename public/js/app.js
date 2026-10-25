@@ -140,7 +140,7 @@
   var authForm = $('#auth-form');
   var accountPanel = $('#account-panel');
   var accountName = $('#account-name');
-  var identifierInput = $('#auth-identifier');
+  var emailInput = $('#auth-email');
   var passwordInput = $('#auth-password');
   var repeatInput = $('#auth-password2');
   var repeatLabel = $('#auth-repeat-label');
@@ -205,22 +205,21 @@
   }
 
   function validateAuth(mode) {
-    var identifier = identifierInput.value.trim();
+    var email = emailInput.value.trim();
     var password = passwordInput.value;
     var ok = true;
 
-    if (!identifier) {
-      fieldError(identifierInput, 'Enter your email or handle.');
+    if (!email) {
+      fieldError(emailInput, 'Enter your email address.');
+      ok = false;
+    } else if (!isEmail(email)) {
+      fieldError(emailInput, 'Enter a valid email address.');
       ok = false;
     } else {
-      fieldError(identifierInput, '');
+      fieldError(emailInput, '');
     }
 
     if (mode === 'signup') {
-      if (!isEmail(identifier)) {
-        fieldError(identifierInput, 'Sign up with an email address.');
-        ok = false;
-      }
       if (password.length < 8) {
         fieldError(passwordInput, 'Use at least 8 characters.');
         ok = false;
@@ -248,7 +247,7 @@
     if (err.code === 'offline') {
       return 'Cannot reach the account service. Start the local server (npm start) and try again.';
     }
-    if (err.code === 'invalid_credentials') return 'Wrong email, handle or password.';
+    if (err.code === 'invalid_credentials') return 'Wrong email or password.';
     if (err.code === 'email_taken') return 'That email is already registered — try logging in.';
     if (err.code === 'invalid_email') return 'Enter a valid email address.';
     if (err.code === 'invalid_password') return 'Use a password with at least 8 characters.';
@@ -296,11 +295,11 @@
 
     setAuthBusy(true);
     setFormError('');
-    var identifier = identifierInput.value.trim();
+    var email = emailInput.value.trim();
     var password = passwordInput.value;
     var action = mode === 'signup'
-      ? ADM.auth.register(identifier, password)
-      : ADM.auth.login(identifier, password);
+      ? ADM.auth.register(email, password)
+      : ADM.auth.login(email, password);
 
     action.then(function (user) {
       setAuthBusy(false);
@@ -326,7 +325,7 @@
 
   switchButton.addEventListener('click', function () {
     setAuthMode('login');
-    identifierInput.focus();
+    emailInput.focus();
   });
 
   signupButton.addEventListener('click', function () {
@@ -338,7 +337,7 @@
     submitAuth('signup');
   });
 
-  [identifierInput, passwordInput, repeatInput].forEach(function (input) {
+  [emailInput, passwordInput, repeatInput].forEach(function (input) {
     input.addEventListener('input', function () {
       if (input.getAttribute('aria-invalid') === 'true') fieldError(input, '');
       setFormError('');
@@ -349,7 +348,7 @@
     logoutButton.disabled = true;
     ADM.auth.logout().then(function () {
       logoutButton.disabled = false;
-      identifierInput.focus();
+      emailInput.focus();
       toast('Logged out. New questions will be saved on this device only.', 'info');
     });
   });
@@ -461,11 +460,11 @@
 
       if (!user) {
         toast('Log in first — clubs use your account to register you.', 'error');
-        identifierInput.focus();
-        identifierInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        identifierInput.classList.remove('pulse');
-        void identifierInput.offsetWidth;
-        identifierInput.classList.add('pulse');
+        emailInput.focus();
+        emailInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        emailInput.classList.remove('pulse');
+        void emailInput.offsetWidth;
+        emailInput.classList.add('pulse');
         return;
       }
 

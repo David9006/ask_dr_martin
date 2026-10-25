@@ -117,27 +117,27 @@ async function register(request, db) {
 
 async function login(request, db, ip) {
   const body = await readJson(request);
-  const identifier = String(body.identifier || '').trim();
+  const email = normalizeEmail(body.email);
   const password = typeof body.password === 'string' ? body.password : '';
 
-  if (!identifier || !password) {
-    return fail(400, 'missing_fields', 'Enter your email or handle and your password.');
+  if (!email || !password) {
+    return fail(400, 'missing_fields', 'Enter your email and password.');
   }
 
-  const throttleKey = `${ip || 'unknown'}|${identifier.toLowerCase()}`;
+  const throttleKey = `${ip || 'unknown'}|${email}`;
   if (isThrottled(throttleKey)) {
     return fail(429, 'too_many_attempts', 'Too many failed attempts. Try again in 15 minutes.');
   }
 
   const row = await db
-    .prepare('SELECT id, email, username, password_hash, created_at FROM users WHERE email = ? OR username = ? LIMIT 1')
-    .bind(identifier, identifier)
+    .prepare('SELECT id, email, username, password_hash, created_at FROM users WHERE email = ? LIMIT 1')
+    .bind(email)
     .first();
 
   const valid = Boolean(row) && (await verifyPassword(password, row.password_hash));
   if (!valid) {
     noteFailure(throttleKey);
-    return fail(401, 'invalid_credentials', 'Wrong email, handle or password.');
+    return fail(401, 'invalid_credentials', 'Wrong email or password.');
   }
 
   loginFailures.delete(throttleKey);

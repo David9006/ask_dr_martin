@@ -42,10 +42,10 @@ npx wrangler pages dev                                                # http://1
 - **HOME / CLUBS / NEWS / SERVICES / Q&A** 五个标签页可以真正切换页面内容，支持
   `#home`、`#clubs`、`#qa` 之类的 hash 深链接、鼠标点击以及键盘
   `←` `→` `Home` `End` 操作。
-- **账户表单**（Email/Handle + Password + `Login` / `Sign Up`）：
+- **账户表单**（Email + Password + `Login` / `Sign Up`）：
   - 未登录时显示表单；点 `Sign Up` 会多出一行 **Repeat Password**，再点一次即注册。
-  - 注册用邮箱（密码至少 8 位），用户名自动取邮箱前缀（如 `casey@example.com` → `casey`，
-    重名时自动加数字）；之后可以用**邮箱或用户名**登录。
+  - 注册和登录都只用**邮箱**（密码至少 8 位）。显示用的昵称自动取邮箱前缀
+    （如 `casey@example.com` → `casey`，重名时自动加数字），仅用于问候语，不能用来登录。
   - 已登录时隐藏表单，改为显示 `Hi, 用户名` 和 `Log out`。
   - 有行内错误提示，登录失败提示、重复邮箱、密码过短、两次密码不一致等都有对应文案。
 - 右侧的 ⚙ 按钮打开 **AI settings** 面板。
@@ -126,7 +126,7 @@ npx wrangler pages dev                                                # http://1
 | 方法 & 路径 | 说明 |
 | --- | --- |
 | `POST /api/auth/register` | `{email, password}` → 创建账户并返回令牌 |
-| `POST /api/auth/login` | `{identifier, password}`，`identifier` 可填邮箱或用户名 |
+| `POST /api/auth/login` | `{email, password}`，只接受邮箱 |
 | `POST /api/auth/logout` | 注销当前令牌 |
 | `GET /api/auth/me` | 校验令牌并返回当前用户 |
 | `GET /api/answers` | 当前用户保存的问答 |
