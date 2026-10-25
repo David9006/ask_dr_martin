@@ -1,7 +1,12 @@
 // PBKDF2-SHA256 through WebCrypto: available in both the Workers runtime and Node,
 // and far cheaper than scrypt for Workers CPU budgets.
+//
+// Cloudflare's WebCrypto rejects iteration counts above 100000
+// ("Pbkdf2 failed: iteration counts above 100000 are not supported"),
+// so 100000 is the hard ceiling on Workers — do not raise it.
+// The count is stored inside each hash, so existing hashes stay verifiable.
 
-const ITERATIONS = 150000;
+const ITERATIONS = 100000;
 const SALT_BYTES = 16;
 const KEY_BYTES = 32;
 

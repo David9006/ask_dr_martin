@@ -135,8 +135,11 @@ npx wrangler pages dev                                                # http://1
 
 安全措施：
 
-- 密码用 **PBKDF2-SHA256（15 万次迭代，WebCrypto）** 加盐哈希。这里不用 scrypt 是因为
-  Workers 有 CPU 时间预算，PBKDF2 由原生实现、开销更可控。
+- 密码用 **PBKDF2-SHA256（10 万次迭代，WebCrypto）** 加盐哈希。这里不用 scrypt 是因为
+  Workers 有 CPU 时间预算，PBKDF2 由原生实现、开销更可控；迭代次数上限定为 10 万，
+  因为 Cloudflare 的 WebCrypto 明确拒绝超过 100000 的 PBKDF2 迭代
+  （`Pbkdf2 failed: iteration counts above 100000 are not supported`）。
+  迭代次数记录在每个哈希串内部，日后提高上限时旧密码仍可校验。
 - 会话令牌 32 字节随机数，数据库只存 SHA-256 摘要，有效期 30 天，退出即删除。
 - 登录失败同一 IP + 账号 15 分钟内最多 8 次，超过返回 429（按 isolate 计数，属于尽力而为）。
 - 请求体上限 64 KB；本地静态服务做了目录穿越防护。
