@@ -147,6 +147,7 @@
   var repeatField = $('#auth-repeat-field');
   var loginButton = $('#auth-login');
   var signupButton = $('#auth-signup');
+  var switchButton = $('#auth-switch');
   var logoutButton = $('#auth-logout');
   var formError = $('#auth-form-error');
 
@@ -185,9 +186,10 @@
     repeatLabel.hidden = !signup;
     repeatField.hidden = !signup;
     repeatInput.disabled = !signup;
+    loginButton.hidden = signup;
+    switchButton.hidden = !signup;
     signupButton.setAttribute('aria-pressed', signup ? 'true' : 'false');
     signupButton.classList.toggle('is-active', signup);
-    loginButton.classList.toggle('is-active', !signup);
     passwordInput.autocomplete = signup ? 'new-password' : 'current-password';
     setFormError('');
     fieldError(repeatInput, '');
@@ -197,6 +199,7 @@
     authBusy = busy;
     loginButton.disabled = busy;
     signupButton.disabled = busy;
+    switchButton.disabled = busy;
     loginButton.textContent = busy && authMode === 'login' ? 'Logging in…' : 'Login';
     signupButton.textContent = busy && authMode === 'signup' ? 'Signing up…' : 'Sign Up';
   }
@@ -319,6 +322,11 @@
   authForm.addEventListener('submit', function (event) {
     event.preventDefault();
     submitAuth(authMode);
+  });
+
+  switchButton.addEventListener('click', function () {
+    setAuthMode('login');
+    identifierInput.focus();
   });
 
   signupButton.addEventListener('click', function () {
