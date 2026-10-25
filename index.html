@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask Dr. Martin — Health &amp; Exercise Advice</title>
+<meta name="description" content="Ask Dr. Martin your questions about running, exercise, recovery and staying healthy.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div class="brand-space" aria-hidden="true"></div>
+
+    <nav class="tabs" role="tablist" aria-label="Main navigation">
+      <button class="tab" id="tab-home" role="tab" aria-selected="true" aria-controls="panel-home" data-tab="home"><span>HOME</span></button>
+      <button class="tab" id="tab-clubs" role="tab" aria-selected="false" aria-controls="panel-clubs" data-tab="clubs" tabindex="-1"><span>CLUBS</span></button>
+      <button class="tab" id="tab-news" role="tab" aria-selected="false" aria-controls="panel-news" data-tab="news" tabindex="-1"><span>NEWS</span></button>
+      <button class="tab" id="tab-services" role="tab" aria-selected="false" aria-controls="panel-services" data-tab="services" tabindex="-1"><span>SERVICES</span></button>
+      <button class="tab" id="tab-qa" role="tab" aria-selected="false" aria-controls="panel-qa" data-tab="qa" tabindex="-1"><span>Q&amp;A</span></button>
+    </nav>
+
+    <div class="header-right">
+      <form class="subscriber" id="auth-form" novalidate>
+        <label for="auth-identifier">Email/Handle</label>
+        <div class="sub-field">
+          <input id="auth-identifier" name="identifier" type="text" autocomplete="username" spellcheck="false" aria-describedby="auth-identifier-error" placeholder="you@example.com">
+          <p class="field-error" id="auth-identifier-error" hidden></p>
+        </div>
+
+        <label for="auth-password">Password</label>
+        <div class="sub-field">
+          <input id="auth-password" name="password" type="password" autocomplete="current-password" aria-describedby="auth-password-error" placeholder="Password">
+          <p class="field-error" id="auth-password-error" hidden></p>
+        </div>
+
+        <label for="auth-password2" id="auth-repeat-label" hidden>Repeat Password</label>
+        <div class="sub-field" id="auth-repeat-field" hidden>
+          <input id="auth-password2" name="password2" type="password" autocomplete="new-password" aria-describedby="auth-password2-error" placeholder="Repeat password">
+          <p class="field-error" id="auth-password2-error" hidden></p>
+        </div>
+
+        <p class="sub-error" id="auth-form-error" role="alert" hidden></p>
+
+        <div class="sub-actions">
+          <button class="sub-save" type="submit" id="auth-login">Login</button>
+          <button class="sub-save" type="button" id="auth-signup" aria-pressed="false">Sign Up</button>
+        </div>
+      </form>
+
+      <div class="account" id="account-panel" hidden>
+        <p class="account-hello">Hi, <strong id="account-name"></strong></p>
+        <button class="sub-save" type="button" id="auth-logout">Log out</button>
+      </div>
+
+      <button class="gear" id="open-settings" type="button" title="AI settings" aria-label="Open AI settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M19.4 13.6a7.9 7.9 0 0 0 0-3.2l2-1.2-2-3.4-2.2 1a7.8 7.8 0 0 0-2.7-1.6L14.2 2h-4l-.3 2.2A7.8 7.8 0 0 0 7.2 5.8l-2.2-1-2 3.4 2 1.2a7.9 7.9 0 0 0 0 3.2l-2 1.2 2 3.4 2.2-1a7.8 7.8 0 0 0 2.7 1.6l.3 2.2h4l.3-2.2a7.8 7.8 0 0 0 2.7-1.6l2.2 1 2-3.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="header-strip" aria-hidden="true"></div>
+</header>
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <h1 class="hero-title" id="hero-title">Ask Dr. Martin</h1>
+      <form class="search-form" id="hero-search" role="search">
+        <span class="search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M15.5 15.5 21 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <label class="visually-hidden" for="hero-question">Your question</label>
+        <input id="hero-question" type="text" placeholder="Your questions ..." autocomplete="off">
+        <button type="submit" class="find-btn">find</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<main>
+  <section class="tab-panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
+    <article class="card letter-card">
+      <div class="letter-body" id="letter-body"></div>
+    </article>
+  </section>
+
+  <section class="tab-panel" id="panel-clubs" role="tabpanel" aria-labelledby="tab-clubs" tabindex="0" hidden>
+    <div class="card panel-card">
+      <h2>Clubs near you</h2>
+      <p class="panel-lead">Train with other people — it is the easiest way to keep running. Pick a club, turn up, and Dr. Martin will see you at the finish line.</p>
+      <div class="grid-3" id="clubs-grid"></div>
+      <p class="panel-note">Joining a club needs an account — log in at the top of the page and we will use it to register you.</p>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="panel-news" role="tabpanel" aria-labelledby="tab-news" tabindex="0" hidden>
+    <div class="card panel-card">
+      <h2>News from the practice</h2>
+      <p class="panel-lead">Clinic hours, community runs and the health campaigns Dr. Martin is part of.</p>
+      <ul class="news-list" id="news-list"></ul>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="panel-services" role="tabpanel" aria-labelledby="tab-services" tabindex="0" hidden>
+    <div class="card panel-card">
+      <h2>Services</h2>
+      <p class="panel-lead">Care that fits around your training. Every service starts with a conversation about your goals.</p>
+      <div class="grid-3" id="services-grid"></div>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="panel-qa" role="tabpanel" aria-labelledby="tab-qa" tabindex="0" hidden>
+    <div class="card panel-card">
+      <h2>Questions &amp; answers</h2>
+      <p class="panel-lead">Ask about exercise, recovery or staying healthy with the question box at the top of the page. Answers from Dr. Martin's archive appear instantly; new questions are answered by the AI service you configure. Log in and every answered question is saved to your account.</p>
+
+      <div class="qa-views">
+        <div class="qa-list-view" id="qa-list-view">
+          <h3 class="qa-side-title">Previous questions</h3>
+          <ul class="qa-list" id="qa-list" aria-label="Previous questions"></ul>
+        </div>
+
+        <div class="qa-answer" id="qa-answer" hidden>
+          <button class="qa-back" id="qa-back" type="button"><span aria-hidden="true">←</span> All questions</button>
+          <div id="qa-answer-body" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="guidelines-modal" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="guidelines-title">
+    <button class="modal-close" type="button" data-close-modal aria-label="Close guidelines">&times;</button>
+    <h2 id="guidelines-title">Running guidelines</h2>
+    <p class="modal-lead">Dr. Martin's short checklist before you lace up.</p>
+    <div id="guidelines-body" class="guidelines-body"></div>
+  </div>
+</div>
+
+<div class="modal" id="settings-modal" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <button class="modal-close" type="button" data-close-modal aria-label="Close AI settings">&times;</button>
+    <h2 id="settings-title">AI settings</h2>
+    <p class="modal-lead">New questions are answered by an OpenAI-compatible chat service. The key is kept in this browser's local storage and sent only to the endpoint below.</p>
+
+    <form id="settings-form" novalidate>
+      <div class="form-row">
+        <label for="ai-base">Endpoint base URL</label>
+        <input id="ai-base" name="baseUrl" type="url" spellcheck="false" placeholder="https://api.openai.com/v1">
+      </div>
+      <div class="form-row">
+        <label for="ai-model">Model</label>
+        <input id="ai-model" name="model" type="text" spellcheck="false" placeholder="gpt-4o-mini">
+      </div>
+      <div class="form-row">
+        <label for="ai-key">API key</label>
+        <div class="key-row">
+          <input id="ai-key" name="apiKey" type="password" spellcheck="false" autocomplete="off" placeholder="sk-...">
+          <button type="button" class="btn ghost small" id="toggle-key" aria-pressed="false">Show</button>
+        </div>
+      </div>
+      <p class="form-hint">The endpoint must allow cross-origin requests (CORS) from this page. Nothing is sent anywhere until you ask a question.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="clear-key">Clear key</button>
+        <button type="submit" class="btn primary">Save settings</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-stack" id="toast-stack" role="status" aria-live="polite"></div>
+
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

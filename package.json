@@ -1,0 +1,13 @@
+{
+  "name": "ask-dr-martin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ask Dr. Martin page with a dependency-free Node + SQLite account service",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

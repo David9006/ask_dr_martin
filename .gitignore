@@ -1,0 +1,18 @@
+# local SQLite database (contains account emails and password hashes)
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# secrets and local config
+.env
+.env.*
+.dev.vars
+*.pem
+*.key
+
+# tooling and OS files
+node_modules/
+.wrangler/
+.DS_Store
+*.log
