@@ -1,11 +1,13 @@
 {
   "name": "ask-dr-martin",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Ask Dr. Martin page with a dependency-free Node + SQLite account service",
-  "main": "server/server.js",
+  "type": "module",
+  "description": "Ask Dr. Martin — static front end plus a Cloudflare Pages Functions API backed by D1",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/dev.mjs",
+    "dev": "wrangler pages dev public --d1 DB=ask-dr-martin-db",
+    "deploy": "wrangler pages deploy public"
   },
   "engines": {
     "node": ">=22.5.0"

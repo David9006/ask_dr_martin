@@ -1,21 +1,19 @@
 # Ask Dr. Martin
 
-课本第 37 页上方那个 "Ask Dr. Martin" 网页的可运行实现。前端是纯 HTML / CSS / JavaScript，
-没有构建步骤；账户服务是一个零依赖的 Node 脚本，数据库用 Node 自带的 `node:sqlite`。
+课本第 37 页上方那个 "Ask Dr. Martin" 网页的可运行实现：纯 HTML / CSS / JavaScript 前端
+＋ Cloudflare Pages Functions API ＋ D1 数据库，没有构建步骤，也不需要任何 npm 依赖。
 
 ## 运行
 
-需要 Node.js 22.5 或更高版本（`node:sqlite` 从该版本开始提供）。
+### 本地开发（推荐）
 
 ```bash
-npm start            # 等价于 node server/server.js
+npm start            # node server/dev.mjs
 # 打开 http://127.0.0.1:8787
 ```
 
-服务器同时提供静态页面和 `/api/*` 接口，所以注册、登录、保存问答都同源，不需要额外配置。
-
-也可以继续像以前一样直接双击 `index.html`（`file://`）：页面会自动把账户请求发到
-`http://127.0.0.1:8787`（服务器允许跨域），前提是本地服务已经启动。
+这个脚本用 Node 自带的 `node:sqlite` 模拟 D1，跑的是**和线上完全同一份** `functions/` 代码，
+所以本地通过的功能部署后行为一致。需要 Node.js 22.5 或更高版本。
 
 环境变量：
 
@@ -23,7 +21,19 @@ npm start            # 等价于 node server/server.js
 | --- | --- | --- |
 | `PORT` | `8787` | 监听端口 |
 | `HOST` | `127.0.0.1` | 监听地址 |
-| `ADM_DB` | `server/data/ask-dr-martin.db` | SQLite 数据库文件路径 |
+| `ADM_DB` | `server/data/ask-dr-martin.db` | 本地 SQLite 文件路径 |
+
+### 本地开发（真实 Workers 运行时）
+
+想看 Cloudflare 真正执行的效果，用 Wrangler：
+
+```bash
+npx wrangler d1 execute ask-dr-martin-db --local --file=./schema.sql   # 首次
+npx wrangler pages dev                                                # http://127.0.0.1:8787
+```
+
+也可以直接双击 `public/index.html`（`file://`）：页面会把账户请求发到
+`http://127.0.0.1:8787`（接口允许跨域），前提是本地服务已启动。
 
 ## 已实现的功能
 
@@ -97,13 +107,18 @@ npm start            # 等价于 node server/server.js
 
 ## 账户服务
 
-零依赖，`server/` 下三个文件：
+后端就是 `functions/`，Cloudflare Pages 会把它部署成 `/api/*` 的 Functions；
+本地 `npm start` 用同一份代码跑在 Node 上。
 
 | 文件 | 作用 |
 | --- | --- |
-| `server/server.js` | HTTP 服务：静态文件 + `/api/*` 路由、CORS、登录限流 |
-| `server/db.js` | SQLite（`node:sqlite`）表结构与查询 |
-| `server/auth.js` | scrypt 密码哈希、随机会话令牌与 SHA-256 摘要 |
+| `functions/api/[[path]].js` | Pages Function 入口，所有 `/api/*` 请求都走这里 |
+| `functions/_lib/handler.js` | 路由、校验、D1 查询、登录限流 |
+| `functions/_lib/http.js` | JSON/错误响应、CORS、请求体解析 |
+| `functions/_lib/crypto.js` | PBKDF2 密码哈希、会话令牌与 SHA-256 摘要 |
+| `schema.sql` | 建表语句，本地与 D1 共用 |
+| `server/dev.mjs` | 本地开发服务器（静态文件 + 调同一个 handler） |
+| `server/d1-node.mjs` | 把 `node:sqlite` 包装成 D1 的 `prepare().bind()` 接口 |
 
 接口：
 
@@ -115,17 +130,19 @@ npm start            # 等价于 node server/server.js
 | `GET /api/auth/me` | 校验令牌并返回当前用户 |
 | `GET /api/answers` | 当前用户保存的问答 |
 | `POST /api/answers` | `{question, answer}`，同一个问题会更新而不是重复插入 |
+| `GET /api/health` | 健康检查 |
 
 安全措施：
 
-- 密码用 scrypt（N=16384）加盐哈希，数据库里只有哈希值。
+- 密码用 **PBKDF2-SHA256（15 万次迭代，WebCrypto）** 加盐哈希。这里不用 scrypt 是因为
+  Workers 有 CPU 时间预算，PBKDF2 由原生实现、开销更可控。
 - 会话令牌 32 字节随机数，数据库只存 SHA-256 摘要，有效期 30 天，退出即删除。
-- 登录失败同一 IP + 账号 15 分钟内最多 8 次，超过返回 429。
-- 请求体上限 64 KB；静态文件路径做了目录穿越防护。
+- 登录失败同一 IP + 账号 15 分钟内最多 8 次，超过返回 429（按 isolate 计数，属于尽力而为）。
+- 请求体上限 64 KB；本地静态服务做了目录穿越防护。
 - 问答按用户隔离，其他账户看不到你的记录。
 
-**注意**：这是本地演示用的服务，令牌和 AI key 仍存放在浏览器 `localStorage`；
-如果要公开部署，需要加 HTTPS、邮箱验证、CSRF/会话加固和真正的密钥托管。
+**注意**：会话令牌和 AI key 仍存在浏览器 `localStorage`。公开上线前建议再加邮箱验证、
+密码重置和更严格的风控。
 
 ## 本地存储
 
@@ -139,38 +156,49 @@ npm start            # 等价于 node server/server.js
 ## 文件结构
 
 ```
-index.html        页面结构与所有标签页内容
-styles.css        配色、顶栏斜角标签、横幅、账户表单、卡片、弹窗、toast、响应式
-package.json      npm start 脚本（无依赖）
-server/server.js  HTTP 服务：静态文件 + 账户/问答 API
-server/db.js      SQLite 表结构与查询
-server/auth.js    scrypt 哈希与会话令牌
-assets/
-  hero-banner.jpg 横幅原图（已获授权），裁切并修复过
-js/config.js      可选：指向另一个域名的账户服务（默认为同源）
-js/data.js        归档问答、俱乐部 / 新闻 / 服务、跑步指南数据
-js/ai.js          AI 设置读写、OpenAI 兼容请求、错误信息映射
-js/auth.js        账户接口客户端与会话保存
-js/app.js         标签页路由、账户表单、搜索与回答渲染、弹窗、toast
+public/                Cloudflare Pages 的构建输出目录
+  index.html           页面结构与所有标签页内容
+  styles.css           配色、顶栏斜角标签、横幅、账户表单、卡片、弹窗、toast、响应式
+  assets/hero-banner.jpg  横幅原图（已获授权），裁切并修复过
+  js/config.js         可选：指向另一个域名的账户服务（默认同源）
+  js/data.js           归档问答、俱乐部 / 新闻 / 服务、跑步指南数据
+  js/ai.js             AI 设置读写、OpenAI 兼容请求、错误信息映射
+  js/auth.js           账户接口客户端与会话保存
+  js/app.js            标签页路由、账户表单、搜索与回答渲染、弹窗、toast
+
+functions/            Pages Functions（部署到 /api/*）
+  api/[[path]].js     入口
+  _lib/handler.js     业务逻辑：账户与问答
+  _lib/http.js        JSON / CORS / 校验工具
+  _lib/crypto.js      PBKDF2 哈希与会话令牌
+
+server/               本地开发用（不会部署）
+  dev.mjs             静态文件 + 调用同一个 handler
+  d1-node.mjs         node:sqlite → D1 接口的适配层
+
+schema.sql            建表语句（本地与 D1 通用）
+wrangler.toml         Pages 项目配置与 D1 绑定
+package.json          npm start / dev / deploy 脚本
 ```
 
 ## 发布到 GitHub
 
-可以安全提交的内容：`index.html`、`styles.css`、`js/`、`assets/`、`server/*.js`、`package.json`、`README.md`。代码里没有任何硬编码密钥。
+可以安全提交的内容：`public/`（页面与前端代码）、`functions/`、`server/`、`schema.sql`、`wrangler.toml`、`package.json`、`README.md`。代码里没有任何硬编码密钥。
 
 **不要提交**（`.gitignore` 已覆盖）：
 
 | 路径 | 原因 |
 | --- | --- |
-| `server/data/`、`*.db`、`*.db-shm`、`*.db-wal` | SQLite 数据库，含注册邮箱与密码哈希（虽然是 scrypt 哈希，也不该公开） |
+| `server/data/`、`*.db`、`*.db-shm`、`*.db-wal` | 本地 SQLite 数据库，含注册邮箱与密码哈希（虽然是哈希，也不该公开） |
 | `.env`、`.env.*`、`.dev.vars` | 本地密钥/环境变量 |
 | `*.pem`、`*.key` | 私钥文件 |
-| `node_modules/`、`.wrangler/`、`*.log`、`.DS_Store` | 依赖、工具缓存、日志、系统文件 |
+| `node_modules/`、`.wrangler/`、`.dev.vars`、`*.log`、`.DS_Store` | 依赖、Wrangler 本地状态、日志、系统文件 |
 
 另外两点：
 
-- AI 的 API key 从来没有写进文件，它只存在用户浏览器的 `localStorage` 里，所以不用担心提交时泄露；也请不要把 key 填进 `js/config.js`。
-- `assets/hero-banner.jpg` 是课本素材（你已取得授权），可以随仓库发布，但对外公开时请确认授权范围允许公开托管。
+- AI 的 API key 从来没有写进文件，它只存在用户浏览器的 `localStorage` 里，所以不用担心提交时泄露；也请不要把 key 填进 `public/js/config.js`。
+- `public/assets/hero-banner.jpg` 是课本素材（你已取得授权），可以随仓库发布，但对外公开时请确认授权范围允许公开托管。
+- `wrangler.toml` 里的 `database_id` 不是密钥，可以提交；真正的 D1 访问由 Cloudflare 账号权限控制。
 
 首次发布：
 
@@ -185,62 +213,65 @@ git push -u origin main
 
 ## 部署到 Cloudflare Pages
 
-**先说明限制**：Cloudflare Pages 只能托管静态文件，不能运行 `server/server.js`（Node + `node:sqlite`）。所以有三种做法：
+这个项目就是按 **Pages 全栈**（静态资源 + Functions + D1）组织的，不需要改代码。
 
-### 方案 A：只部署前端（最快，账户功能不可用）
-
-1. 把仓库连到 Cloudflare：Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**，选这个仓库。
-2. 构建设置：
-   - Framework preset：**None**
-   - Build command：**留空**
-   - Build output directory：**`/`**（如果按下面“建议”把静态文件移进 `public/`，就填 `public`）
-3. **Save and Deploy**，之后每次 push 自动部署。
-
-或者不用 Git，直接上传：
-
-```bash
-npx wrangler pages deploy . --project-name ask-dr-martin
-```
-
-结果：页面、标签页、归档问答都正常；但顶栏注册/登录会提示 “Cannot reach the account service.”，因为后端不存在。
-
-> 提示：输出目录设成仓库根目录时，`server/*.js`、`package.json` 也会被当成静态文件公开（不含密钥，但没必要）。更干净的做法是把 `index.html`、`styles.css`、`js/`、`assets/` 移到 `public/`，输出目录填 `public`。
-
-### 方案 B：Pages Functions + D1（账户功能也能用）
-
-Pages 支持在仓库根目录放 `functions/` 目录，用 Workers 运行时处理 `/api/*`，数据存 D1（SQLite）。需要把 `server/` 改写成 Functions：
-
-- `functions/api/auth/register.js`、`login.js`、`logout.js`、`me.js`
-- `functions/api/answers/index.js`（`GET` 列表 / `POST` 保存）
-- `schema.sql` + `wrangler.toml`（`pages_build_output_dir = "public"`，`[[d1_databases]] binding = "DB"`）
-- Workers 里没有 `node:sqlite` 和 `scrypt`，改用 `env.DB.prepare(...)` 和 WebCrypto 的 **PBKDF2-SHA256** 做密码哈希
-
-步骤：
+### 1. 创建 D1 数据库
 
 ```bash
 npx wrangler login
-npx wrangler d1 create ask-dr-martin-db       # 把返回的 database_id 写进 wrangler.toml
+npx wrangler d1 create ask-dr-martin-db
+```
+
+把输出里的 `database_id` 填进 [wrangler.toml](./wrangler.toml)（现在的
+`00000000-0000-0000-0000-000000000000` 只是让本地开发能跑起来的占位值）：
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "ask-dr-martin-db"
+database_id = "真正的 id"
+```
+
+然后建表：
+
+```bash
 npx wrangler d1 execute ask-dr-martin-db --remote --file=./schema.sql
+```
+
+### 2. 部署
+
+**方式一：直接上传**
+
+```bash
 npx wrangler pages deploy public --project-name ask-dr-martin
 ```
 
-Git 部署时在 Dashboard → 项目 → **Settings → Functions → D1 database bindings** 里绑定 `DB` 到该数据库，并设置同样的构建输出目录。
+**方式二：接 GitHub（推荐，push 自动部署）**
 
-前端不需要改动：接口同源，`js/config.js` 保持 `window.ADM_API_BASE = ''`。
+Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**，选择仓库后：
 
-### 方案 C：前端在 Pages，Node 接口放别处
+| 设置 | 值 |
+| --- | --- |
+| Framework preset | None |
+| Build command | 留空 |
+| Build output directory | `public` |
 
-1. 按方案 A 部署静态站点。
-2. 把 `server/` 部署到 Render / Railway / Fly.io 之类能跑 Node 的地方（启动命令 `node server/server.js`，需要 `PORT`、`ADM_DB`）。
-3. 在 `js/config.js` 里指向它：
+`functions/` 必须在仓库根目录（不能放进 `public/`），Pages 会自动把它编译成 `/api/*`。
+如果是在 Dashboard 里创建的 D1，记得去 **Settings → Bindings → D1 database** 把变量名设为 `DB`。
 
-```js
-window.ADM_API_BASE = 'https://your-api.example.com';
-```
+### 3. 验证
 
-服务端已经返回 `Access-Control-Allow-Origin: *`，跨域下 Bearer 令牌可以正常工作。
+部署完成后打开 `https://<项目>.pages.dev/api/health`，应返回 `{"ok":true}`；
+再在页面右上角注册一个账号、提一个问题，答案应该出现在 Q&A 列表里。
 
-注意：免费实例的磁盘通常重启即清空；要长期保留账户，请挂载持久磁盘（或把 `db.js` 换成 Turso/Postgres）。
+### 常见问题
+
+| 现象 | 原因 |
+| --- | --- |
+| `/api/*` 返回 `{"error":{"code":"db_unbound"}}` | 没绑定 D1，或绑定名不是 `DB` |
+| `/api/*` 返回 `no such table: users` | 没有执行 `schema.sql`（本地/远端搞混了） |
+| 静态页面 404 | Build output directory 没设成 `public` |
+| 登录一直 401 | 密码哈希算法只支持 PBKDF2；旧版 scrypt 本地库需要重建 |
 
 ## 说明
 
@@ -249,4 +280,5 @@ window.ADM_API_BASE = 'https://your-api.example.com';
   其余内容（俱乐部、新闻、服务）是示例数据，集中在 `js/data.js`，替换即可。
 - 桌面端回信卡片保留课本中的内部滚动条效果；窄屏（≤640px）会自动取消高度限制，
   按普通页面滚动。
-- 数据库文件默认写在 `server/data/`（已在 `.gitignore` 中忽略），删掉它即可清空所有账户。
+- 本地数据库默认写在 `server/data/`（已在 `.gitignore` 中忽略），删掉它即可清空本地账户。
+- 线上数据在 D1 里，清空用 `npx wrangler d1 execute ask-dr-martin-db --remote --command "DELETE FROM answers; DELETE FROM sessions; DELETE FROM users;"`。
