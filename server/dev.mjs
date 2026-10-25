@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { handleApi } from '../functions/_lib/handler.js';
+import { handleApi } from '../src/api/handler.js';
 import { NodeD1 } from './d1-node.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

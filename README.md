@@ -12,7 +12,7 @@ npm start            # node server/dev.mjs
 # 打开 http://127.0.0.1:8787
 ```
 
-这个脚本用 Node 自带的 `node:sqlite` 模拟 D1，跑的是**和线上完全同一份** `functions/` 代码，
+这个脚本用 Node 自带的 `node:sqlite` 模拟 D1，跑的是**和线上完全同一份** `src/api/` 代码，
 所以本地通过的功能部署后行为一致。需要 Node.js 22.5 或更高版本。
 
 环境变量：
@@ -107,15 +107,16 @@ npx wrangler pages dev                                                # http://1
 
 ## 账户服务
 
-后端就是 `functions/`，Cloudflare Pages 会把它部署成 `/api/*` 的 Functions；
+业务逻辑集中在 `src/api/`，由两个很薄的适配层复用：`functions/` 给 Cloudflare Pages，
+`server/` 给本地 Node。
 本地 `npm start` 用同一份代码跑在 Node 上。
 
 | 文件 | 作用 |
 | --- | --- |
 | `functions/api/[[path]].js` | Pages Function 入口，所有 `/api/*` 请求都走这里 |
-| `functions/_lib/handler.js` | 路由、校验、D1 查询、登录限流 |
-| `functions/_lib/http.js` | JSON/错误响应、CORS、请求体解析 |
-| `functions/_lib/crypto.js` | PBKDF2 密码哈希、会话令牌与 SHA-256 摘要 |
+| `src/api/handler.js` | 路由、校验、D1 查询、登录限流 |
+| `src/api/http.js` | JSON/错误响应、CORS、请求体解析 |
+| `src/api/crypto.js` | PBKDF2 密码哈希、会话令牌与 SHA-256 摘要 |
 | `schema.sql` | 建表语句，本地与 D1 共用 |
 | `server/dev.mjs` | 本地开发服务器（静态文件 + 调同一个 handler） |
 | `server/d1-node.mjs` | 把 `node:sqlite` 包装成 D1 的 `prepare().bind()` 接口 |
@@ -167,10 +168,12 @@ public/                Cloudflare Pages 的构建输出目录
   js/app.js            标签页路由、账户表单、搜索与回答渲染、弹窗、toast
 
 functions/            Pages Functions（部署到 /api/*）
-  api/[[path]].js     入口
-  _lib/handler.js     业务逻辑：账户与问答
-  _lib/http.js        JSON / CORS / 校验工具
-  _lib/crypto.js      PBKDF2 哈希与会话令牌
+  api/[[path]].js     入口，转调 src/api/handler.js
+
+src/api/              共享业务逻辑（Pages 与本地 Node 都复用）
+  handler.js          账户与问答
+  http.js             JSON / CORS / 校验工具
+  crypto.js           PBKDF2 哈希与会话令牌
 
 server/               本地开发用（不会部署）
   dev.mjs             静态文件 + 调用同一个 handler
@@ -183,7 +186,7 @@ package.json          npm start / dev / deploy 脚本
 
 ## 发布到 GitHub
 
-可以安全提交的内容：`public/`（页面与前端代码）、`functions/`、`server/`、`schema.sql`、`wrangler.toml`、`package.json`、`README.md`。代码里没有任何硬编码密钥。
+可以安全提交的内容：`public/`（页面与前端代码）、`functions/`、`src/`、`server/`、`schema.sql`、`wrangler.toml`、`package.json`、`README.md`。代码里没有任何硬编码密钥。
 
 **不要提交**（`.gitignore` 已覆盖）：
 
@@ -256,7 +259,8 @@ Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to 
 | Build command | 留空 |
 | Build output directory | `public` |
 
-`functions/` 必须在仓库根目录（不能放进 `public/`），Pages 会自动把它编译成 `/api/*`。
+`functions/` 必须在仓库根目录（不能放进 `public/`），Pages 会自动把它编译成 `/api/*`；
+`functions/` 里可以用相对路径 import 仓库内其他目录（本项目就从 `src/api/` 引入业务逻辑）。
 如果是在 Dashboard 里创建的 D1，记得去 **Settings → Bindings → D1 database** 把变量名设为 `DB`。
 
 ### 3. 验证
