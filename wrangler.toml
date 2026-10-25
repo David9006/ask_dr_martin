@@ -13,6 +13,4 @@ compatibility_date = "2026-10-25"
 [[d1_databases]]
 binding = "DB"
 database_name = "ask-dr-martin-db"
-# Replace this placeholder with the id printed by `wrangler d1 create`.
-# A UUID-shaped value is required, so local dev works before you create the database.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "d8da52d6-2b7d-4565-83fa-c0d5fd5b1eb0"
