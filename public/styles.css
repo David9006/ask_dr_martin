@@ -229,6 +229,30 @@ body.modal-open {
   color: #ffd9a0;
 }
 
+.code-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.code-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  letter-spacing: .14em;
+}
+
+.code-send {
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 7px;
+  white-space: nowrap;
+}
+
+.code-send:disabled {
+  opacity: .6;
+  cursor: default;
+}
+
 .gear {
   flex: 0 0 auto;
   align-self: center;

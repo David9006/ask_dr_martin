@@ -141,6 +141,13 @@
   var accountPanel = $('#account-panel');
   var accountName = $('#account-name');
   var emailInput = $('#auth-email');
+  var usernameInput = $('#auth-username');
+  var usernameLabel = $('#auth-username-label');
+  var usernameField = $('#auth-username-field');
+  var codeInput = $('#auth-code');
+  var codeLabel = $('#auth-code-label');
+  var codeField = $('#auth-code-field');
+  var sendCodeButton = $('#auth-send-code');
   var passwordInput = $('#auth-password');
   var repeatInput = $('#auth-password2');
   var repeatLabel = $('#auth-repeat-label');
@@ -153,6 +160,8 @@
 
   var authMode = 'login';
   var authBusy = false;
+  var codeCooldownLeft = 0;
+  var codeCooldownTimer = null;
 
   function fieldError(input, message) {
     if (!input) return;
@@ -182,6 +191,13 @@
   function setAuthMode(mode) {
     authMode = mode;
     var signup = mode === 'signup';
+    usernameLabel.hidden = !signup;
+    usernameField.hidden = !signup;
+    usernameInput.disabled = !signup;
+    codeLabel.hidden = !signup;
+    codeField.hidden = !signup;
+    codeInput.disabled = !signup;
+    sendCodeButton.hidden = !signup;
     repeatLabel.hidden = !signup;
     repeatField.hidden = !signup;
     repeatInput.disabled = !signup;
@@ -192,6 +208,8 @@
     passwordInput.autocomplete = signup ? 'new-password' : 'current-password';
     setFormError('');
     fieldError(repeatInput, '');
+    fieldError(usernameInput, '');
+    fieldError(codeInput, '');
   }
 
   function setAuthBusy(busy) {
@@ -199,6 +217,7 @@
     loginButton.disabled = busy;
     signupButton.disabled = busy;
     switchButton.disabled = busy;
+    if (sendCodeButton) sendCodeButton.disabled = busy || codeCooldownLeft > 0;
     loginButton.textContent = busy && authMode === 'login' ? 'Logging in…' : 'Login';
     signupButton.textContent = busy && authMode === 'signup' ? 'Signing up…' : 'Sign Up';
   }
@@ -219,6 +238,19 @@
     }
 
     if (mode === 'signup') {
+      var username = usernameInput.value.trim();
+      if (!/^[a-zA-Z0-9._-]{3,20}$/.test(username)) {
+        fieldError(usernameInput, 'Use 3-20 letters, numbers, dots, dashes or underscores.');
+        ok = false;
+      } else {
+        fieldError(usernameInput, '');
+      }
+      if (!/^\d{6}$/.test(codeInput.value.trim())) {
+        fieldError(codeInput, 'Enter the 6-digit code from the email.');
+        ok = false;
+      } else {
+        fieldError(codeInput, '');
+      }
       if (password.length < 8) {
         fieldError(passwordInput, 'Use at least 8 characters.');
         ok = false;
@@ -250,6 +282,16 @@
     if (err.code === 'email_taken') return 'That email is already registered — try logging in.';
     if (err.code === 'invalid_email') return 'Enter a valid email address.';
     if (err.code === 'invalid_password') return 'Use a password with at least 8 characters.';
+    if (err.code === 'invalid_username') return 'Use 3-20 letters, numbers, dots, dashes or underscores.';
+    if (err.code === 'username_taken') return 'That username is taken — pick another one.';
+    if (err.code === 'invalid_code') return 'That code does not match. Check the email and try again.';
+    if (err.code === 'code_missing') return 'Request a verification code first.';
+    if (err.code === 'code_expired') return 'That code has expired. Send a new one.';
+    if (err.code === 'code_locked') return 'Too many wrong codes. Send a new one.';
+    if (err.code === 'mail_not_configured') {
+      return 'This site cannot send email yet. Ask the owner to configure RESEND_API_KEY.';
+    }
+    if (err.code === 'mail_failed') return 'The email could not be sent. Try again in a moment.';
     return err.message || 'Something went wrong. Please try again.';
   }
 
@@ -332,13 +374,15 @@
     var email = emailInput.value.trim();
     var password = passwordInput.value;
     var action = mode === 'signup'
-      ? ADM.auth.register(email, password)
+      ? ADM.auth.register(email, usernameInput.value.trim(), password, codeInput.value.trim())
       : ADM.auth.login(email, password);
 
     action.then(function (user) {
       setAuthBusy(false);
       passwordInput.value = '';
       repeatInput.value = '';
+      codeInput.value = '';
+      stopCodeCooldown();
       setAuthMode('login');
       toast(
         mode === 'signup'
@@ -350,6 +394,76 @@
       setAuthBusy(false);
       setFormError(authErrorMessage(err));
     });
+  }
+
+  function updateSendCodeLabel() {
+    if (!sendCodeButton) return;
+    if (codeCooldownLeft > 0) {
+      sendCodeButton.disabled = true;
+      sendCodeButton.textContent = 'Resend ' + codeCooldownLeft + 's';
+      return;
+    }
+    sendCodeButton.disabled = authBusy;
+    sendCodeButton.textContent = 'Send code';
+  }
+
+  function stopCodeCooldown() {
+    codeCooldownLeft = 0;
+    if (codeCooldownTimer) {
+      clearInterval(codeCooldownTimer);
+      codeCooldownTimer = null;
+    }
+    updateSendCodeLabel();
+  }
+
+  function startCodeCooldown(seconds) {
+    codeCooldownLeft = seconds;
+    updateSendCodeLabel();
+    if (codeCooldownTimer) clearInterval(codeCooldownTimer);
+    codeCooldownTimer = setInterval(function () {
+      codeCooldownLeft -= 1;
+      if (codeCooldownLeft <= 0) {
+        stopCodeCooldown();
+        return;
+      }
+      updateSendCodeLabel();
+    }, 1000);
+  }
+
+  function sendVerificationCode() {
+    var email = emailInput.value.trim();
+    if (!email) {
+      fieldError(emailInput, 'Enter your email address.');
+      emailInput.focus();
+      return;
+    }
+    if (!isEmail(email)) {
+      fieldError(emailInput, 'Enter a valid email address.');
+      emailInput.focus();
+      return;
+    }
+
+    fieldError(emailInput, '');
+    setFormError('');
+    sendCodeButton.disabled = true;
+    sendCodeButton.textContent = 'Sending…';
+
+    ADM.auth.sendCode(email).then(function (result) {
+      startCodeCooldown(result && result.resendAfter ? result.resendAfter : 60);
+      toast('Code sent to ' + email + '. It expires in 10 minutes.', 'success');
+      codeInput.focus();
+    }).catch(function (err) {
+      updateSendCodeLabel();
+      if (err && err.code === 'email_taken') {
+        fieldError(emailInput, 'That email is already registered — try logging in.');
+        return;
+      }
+      setFormError(authErrorMessage(err));
+    });
+  }
+
+  if (sendCodeButton) {
+    sendCodeButton.addEventListener('click', sendVerificationCode);
   }
 
   authForm.addEventListener('submit', function (event) {
@@ -365,13 +479,18 @@
   signupButton.addEventListener('click', function () {
     if (authMode !== 'signup') {
       setAuthMode('signup');
-      repeatInput.focus();
+      (emailInput.value.trim() ? usernameInput : emailInput).focus();
       return;
     }
     submitAuth('signup');
   });
 
-  [emailInput, passwordInput, repeatInput].forEach(function (input) {
+  codeInput.addEventListener('input', function () {
+    var digits = codeInput.value.replace(/\D/g, '').slice(0, 6);
+    if (digits !== codeInput.value) codeInput.value = digits;
+  });
+
+  [emailInput, usernameInput, codeInput, passwordInput, repeatInput].forEach(function (input) {
     input.addEventListener('input', function () {
       if (input.getAttribute('aria-invalid') === 'true') fieldError(input, '');
       setFormError('');

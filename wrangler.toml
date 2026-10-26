@@ -12,10 +12,15 @@ name = "ask-dr-martin"
 pages_build_output_dir = "public"
 compatibility_date = "2026-10-25"
 
-# No [vars] here: SETTINGS_KEY is a secret and must not live in this file.
-# Set it with:
+# Secrets must not live in this file. Set them with:
 #   npx wrangler pages secret put SETTINGS_KEY --project-name ask-dr-martin
-# For local `wrangler pages dev`, put it in .dev.vars (gitignored).
+#   npx wrangler pages secret put RESEND_API_KEY --project-name ask-dr-martin
+# For local `wrangler pages dev`, put them in .dev.vars (gitignored).
+
+[vars]
+# Sender for the sign-up verification email. The domain must be verified in
+# Resend. `onboarding@resend.dev` only delivers to the Resend account owner.
+MAIL_FROM = "Dr. Martin <onboarding@resend.dev>"
 
 [[d1_databases]]
 binding = "DB"

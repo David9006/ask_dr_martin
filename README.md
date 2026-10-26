@@ -44,11 +44,15 @@ npm run dev             # http://127.0.0.1:8787
   `#home`、`#clubs`、`#qa` 之类的 hash 深链接、鼠标点击以及键盘
   `←` `→` `Home` `End` 操作。
 - **账户表单**（Email + Password + `Login` / `Sign Up`）：
-  - 未登录时显示表单；点 `Sign Up` 会多出一行 **Repeat Password**，再点一次即注册。
-  - 注册和登录都只用**邮箱**（密码至少 8 位）。显示用的昵称自动取邮箱前缀
-    （如 `casey@example.com` → `casey`，重名时自动加数字），仅用于问候语，不能用来登录。
+  - 未登录时显示表单；点 `Sign Up` 后表单变成五行：**Email → Username → Email code →
+    Password → Repeat Password**（`Login` 按钮此时隐藏，底部有「Already have an account?」）。
+  - 注册流程：填邮箱 → 点 **Send code** 让服务器发一封 6 位验证码邮件（60 秒内不能重发，
+    10 分钟后过期，最多试错 5 次）→ 填用户名和密码 → 点 `Sign Up` 完成。
+  - 用户名由自己填：3–20 位字母、数字、`.`、`_`、`-`，全站唯一（不区分大小写），
+    会显示在 Q&A 的作者名和 Dr. Martin 的问候语里。
+  - 登录仍然只用**邮箱 + 密码**（密码至少 8 位），用户名不能用来登录。
   - 已登录时隐藏表单，改为显示 `Hi, 用户名` 和 `Log out`。
-  - 有行内错误提示，登录失败提示、重复邮箱、密码过短、两次密码不一致等都有对应文案。
+  - 有行内错误提示：重复邮箱、用户名被占用、验证码错误/过期、重发太频繁、两次密码不一致等。
 - 右侧的 ⚙ 按钮打开 **AI settings** 面板。
 
 ### 横幅（hero）
@@ -172,6 +176,34 @@ echo 'SETTINGS_KEY=dev-secret' > .dev.vars
 | 历史明文数据 | 仍能正常读回，用户下次保存设置时会自动改写成密文 |
 | 更换/丢失密钥 | 旧密文无法解密，接口对该用户返回空 key（endpoint 与 model 保留），需要重新填写 key |
 
+### 配置注册验证码邮件（Resend）
+
+注册需要邮箱验证码，投递走 [Resend](https://resend.com) 的 HTTP API（`POST https://api.resend.com/emails`），
+不需要额外依赖。
+
+```bash
+# 线上
+npx wrangler pages secret put RESEND_API_KEY --project-name ask-dr-martin
+# 发件人写在 wrangler.toml 的 [vars] MAIL_FROM，域名需在 Resend 里验证
+#   例：MAIL_FROM = "Dr. Martin <no-reply@yourdomain.com>"
+
+# 本地（Node 开发服务器）
+RESEND_API_KEY=re_xxx MAIL_FROM="Dr. Martin <no-reply@yourdomain.com>" npm start
+```
+
+| 情况 | 结果 |
+| --- | --- |
+| 配了 `RESEND_API_KEY` | 真实发信；Resend 拒绝时接口返回 502 `mail_failed` |
+| 都没有配置（本地默认） | `server/dev.mjs` 自动切到 `MAIL_TRANSPORT=console`：验证码直接打印在终端里 |
+| 线上没配 | `POST /api/auth/code` 返回 503 `mail_not_configured`（注册会停在这一步） |
+| 发信失败 | 该邮箱的验证码记录会被删掉，可以立刻重试，不用等 60 秒冷却 |
+
+验证码规则：6 位数字、10 分钟有效、连续输错 5 次作废、同一邮箱 60 秒内不能重发、
+每小时最多 6 封；库里只存 `sha256("<email>:<code>")`，不保存明文。
+
+> Resend 的 `onboarding@resend.dev` 只能发到 Resend 账号自己的邮箱，正式使用请换成
+> 已验证域名下的发件地址。
+
 ## 账户服务
 
 业务逻辑集中在 `src/api/`，由两个很薄的适配层复用：`functions/` 给 Cloudflare Pages，
@@ -192,7 +224,8 @@ echo 'SETTINGS_KEY=dev-secret' > .dev.vars
 
 | 方法 & 路径 | 说明 |
 | --- | --- |
-| `POST /api/auth/register` | `{email, password}` → 创建账户并返回令牌 |
+| `POST /api/auth/code` | `{email}` → 生成 6 位验证码并通过 Resend 发信；60 秒冷却、每地址每小时最多 6 封 |
+| `POST /api/auth/register` | `{email, username, password, code}` → 校验验证码后创建账户并返回令牌 |
 | `POST /api/auth/login` | `{email, password}`，只接受邮箱 |
 | `POST /api/auth/logout` | 注销当前令牌 |
 | `GET /api/auth/me` | 校验令牌并返回当前用户 |
@@ -215,6 +248,8 @@ echo 'SETTINGS_KEY=dev-secret' > .dev.vars
   迭代次数记录在每个哈希串内部，日后提高上限时旧密码仍可校验。
 - 会话令牌 32 字节随机数，数据库只存 SHA-256 摘要，有效期 30 天，退出即删除。
 - 登录失败同一 IP + 账号 15 分钟内最多 8 次，超过返回 429（按 isolate 计数，属于尽力而为）。
+- 注册验证码 6 位数字、10 分钟过期、错 5 次作废、60 秒冷却、每邮箱每小时 6 封；
+  数据库里只存加盐哈希，验过即删。
 - 请求体上限 64 KB；本地静态服务做了目录穿越防护。
 - `GET /api/answers` / `POST /api/answers` 按用户隔离；但 **`GET /api/questions` 是公开的**，
   里面是所有人被回答过的问题（含提问者的用户名，用户名由邮箱前缀生成）。如果你不打算公开，
@@ -249,7 +284,7 @@ functions/            Pages Functions（部署到 /api/*）
   api/[[path]].js     入口，转调 src/api/handler.js
 
 src/api/              共享业务逻辑（Pages 与本地 Node 都复用）
-  handler.js          账户、问答（含公开列表）与设置
+  handler.js          账户、验证码、问答（含公开列表）与设置
   http.js             JSON / CORS / 校验工具
   crypto.js           PBKDF2 哈希与会话令牌
 
@@ -347,7 +382,11 @@ Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to 
 ### 3. 验证
 
 部署完成后打开 `https://<项目>.pages.dev/api/health`，应返回 `{"ok":true}`；
-再在页面右上角注册一个账号、提一个问题，答案应该出现在 Q&A 列表里。
+再在页面右上角注册一个账号（需要先配好 `RESEND_API_KEY`，否则 Send code 会返回
+`mail_not_configured`）、提一个问题，答案应该出现在 Q&A 列表里。
+
+首次部署或改了 `schema.sql` 之后记得跑一次 `npm run db:init`（注册验证码表
+`email_codes` 也在这个文件里）。
 
 ### 常见问题
 
@@ -356,6 +395,9 @@ Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to 
 | `/api/*` 返回 `{"error":{"code":"db_unbound"}}` | 没绑定 D1，或绑定名不是 `DB` |
 | `/api/*` 返回 `no such table: xxx` | 没有执行 `schema.sql`（本地/远端搞混了）；远端用 `npm run db:init` |
 | `/api/*` 返回 `{"error":{"code":"schema_missing"}}` | 数据库缺表，执行 `npm run db:init`（远端）或 `npm run db:init:local`（本地） |
+| 点 Send code 报 `mail_not_configured` | 没配 `RESEND_API_KEY`，见上面「配置注册验证码邮件」 |
+| 点 Send code 报 `mail_failed` | Resend 拒绝了请求：key 无效，或 `MAIL_FROM` 的域名没验证 |
+| 收不到验证码 | 检查垃圾邮件；`code_limit` 表示这个地址一小时内已发 6 封 |
 | 静态页面 404 | Build output directory 没设成 `public` |
 | 登录一直 401 | 密码哈希算法只支持 PBKDF2；旧版 scrypt 本地库需要重建 |
 

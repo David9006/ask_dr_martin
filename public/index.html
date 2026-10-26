@@ -29,6 +29,21 @@
           <p class="field-error" id="auth-email-error" hidden></p>
         </div>
 
+        <label for="auth-username" id="auth-username-label" hidden>Username</label>
+        <div class="sub-field" id="auth-username-field" hidden>
+          <input id="auth-username" name="username" type="text" autocomplete="username" spellcheck="false" aria-describedby="auth-username-error" placeholder="runner_42">
+          <p class="field-error" id="auth-username-error" hidden></p>
+        </div>
+
+        <label for="auth-code" id="auth-code-label" hidden>Email code</label>
+        <div class="sub-field" id="auth-code-field" hidden>
+          <div class="code-row">
+            <input id="auth-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="auth-code-error" placeholder="123456">
+            <button class="sub-save code-send" type="button" id="auth-send-code">Send code</button>
+          </div>
+          <p class="field-error" id="auth-code-error" hidden></p>
+        </div>
+
         <label for="auth-password">Password</label>
         <div class="sub-field">
           <input id="auth-password" name="password" type="password" autocomplete="current-password" aria-describedby="auth-password-error" placeholder="Password">

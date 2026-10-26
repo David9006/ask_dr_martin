@@ -15,6 +15,12 @@ const DB_FILE = process.env.ADM_DB
   ? path.resolve(process.env.ADM_DB)
   : path.join(here, 'data', 'ask-dr-martin.db');
 const SETTINGS_KEY = process.env.SETTINGS_KEY || '';
+// Local development has no mail provider by default, so verification codes are
+// printed to this terminal instead of being sent. Set RESEND_API_KEY (or
+// MAIL_TRANSPORT) to exercise the real delivery path.
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const MAIL_FROM = process.env.MAIL_FROM || '';
+const MAIL_TRANSPORT = process.env.MAIL_TRANSPORT || (RESEND_API_KEY ? '' : 'console');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -34,7 +40,11 @@ const db = new NodeD1(DB_FILE);
 db.exec(fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8'));
 
 async function toResponse(request, ip) {
-  const apiResponse = await handleApi(request, { DB: db, SETTINGS_KEY }, { ip });
+  const apiResponse = await handleApi(
+    request,
+    { DB: db, SETTINGS_KEY, RESEND_API_KEY, MAIL_FROM, MAIL_TRANSPORT },
+    { ip }
+  );
   const body = Buffer.from(await apiResponse.arrayBuffer());
   const headers = {};
   apiResponse.headers.forEach((value, key) => {
@@ -104,6 +114,11 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Ask Dr. Martin dev server: http://${HOST}:${PORT}/`);
+  console.log(
+    MAIL_TRANSPORT === 'console'
+      ? 'Verification codes are printed here instead of being emailed.'
+      : 'Verification emails go through Resend.'
+  );
   console.log(`Static files: ${PUBLIC_DIR}`);
   console.log(`Local database: ${DB_FILE}`);
   console.log(

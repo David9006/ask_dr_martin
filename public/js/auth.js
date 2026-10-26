@@ -106,9 +106,15 @@
     return payload.user;
   }
 
-  function register(email, password) {
-    return request('/api/auth/register', { method: 'POST', body: { email: email, password: password } })
-      .then(startSession);
+  function sendCode(email) {
+    return request('/api/auth/code', { method: 'POST', body: { email: email } });
+  }
+
+  function register(email, username, password, code) {
+    return request('/api/auth/register', {
+      method: 'POST',
+      body: { email: email, username: username, password: password, code: code }
+    }).then(startSession);
   }
 
   function login(email, password) {
@@ -176,6 +182,7 @@
     getUser: getUser,
     getToken: getToken,
     onChange: onChange,
+    sendCode: sendCode,
     register: register,
     login: login,
     logout: logout,
