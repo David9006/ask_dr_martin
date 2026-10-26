@@ -32,18 +32,6 @@ CREATE TABLE IF NOT EXISTS user_settings (
   updated_at TEXT NOT NULL
 );
 
--- One pending verification code per email address. The code itself is only
--- stored as a SHA-256 hash of "<email>:<code>".
-CREATE TABLE IF NOT EXISTS email_codes (
-  email TEXT PRIMARY KEY COLLATE NOCASE,
-  code_hash TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  sent_at TEXT NOT NULL,
-  window_start TEXT NOT NULL,
-  window_count INTEGER NOT NULL DEFAULT 0
-);
-
 CREATE UNIQUE INDEX IF NOT EXISTS answers_user_question ON answers (user_id, lower(question));
 CREATE INDEX IF NOT EXISTS answers_user_created ON answers (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id);

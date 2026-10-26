@@ -38,12 +38,6 @@ const fileVars = readDevVars(path.join(ROOT, '.dev.vars'));
 const setting = (name) => process.env[name] || fileVars[name] || '';
 
 const SETTINGS_KEY = setting('SETTINGS_KEY');
-// With no mail provider configured, verification codes are printed to this
-// terminal instead of being sent.
-const RESEND_API_KEY = setting('RESEND_API_KEY');
-const MAIL_FROM = setting('MAIL_FROM');
-const MAIL_TRANSPORT = setting('MAIL_TRANSPORT') || (RESEND_API_KEY ? '' : 'console');
-
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -64,7 +58,7 @@ db.exec(fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8'));
 async function toResponse(request, ip) {
   const apiResponse = await handleApi(
     request,
-    { DB: db, SETTINGS_KEY, RESEND_API_KEY, MAIL_FROM, MAIL_TRANSPORT },
+    { DB: db, SETTINGS_KEY },
     { ip }
   );
   const body = Buffer.from(await apiResponse.arrayBuffer());
@@ -136,11 +130,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Ask Dr. Martin dev server: http://${HOST}:${PORT}/`);
-  console.log(
-    MAIL_TRANSPORT === 'console'
-      ? 'Verification codes are printed here instead of being emailed.'
-      : 'Verification emails go through Resend.'
-  );
   console.log(`Static files: ${PUBLIC_DIR}`);
   console.log(`Local database: ${DB_FILE}`);
   console.log(

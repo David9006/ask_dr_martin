@@ -1,4 +1,4 @@
-import { fail, json, readJson, isEmail, normalizeEmail, bearerToken, httpError } from './http.js';
+import { fail, json, readJson, isEmail, normalizeEmail, bearerToken } from './http.js';
 import { hashPassword, verifyPassword, randomToken, sha256Hex, encryptSecret, decryptSecret } from './crypto.js';
 
 const SESSION_DAYS = 30;
@@ -25,8 +25,6 @@ export async function handleApi(request, env, options = {}) {
 
   try {
     switch (route) {
-      case 'POST /auth/code':
-        return await sendCode(request, db, env);
       case 'POST /auth/register':
         return await register(request, db);
       case 'POST /auth/login':
@@ -87,162 +85,6 @@ function preflightResponse() {
 
 const USERNAME_RE = /^[a-zA-Z0-9._-]{3,20}$/;
 
-/* ------------------------------------------------ email verification codes */
-
-const CODE_TTL_MS = 10 * 60 * 1000;
-const CODE_COOLDOWN_MS = 60 * 1000;
-const CODE_WINDOW_MS = 60 * 60 * 1000;
-const CODE_WINDOW_MAX = 6;
-const CODE_MAX_ATTEMPTS = 5;
-
-function randomCode() {
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
-  const value = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
-  return String(value % 1000000).padStart(6, '0');
-}
-
-function codeHash(email, code) {
-  // Salted with the address so a leaked row cannot be matched against a
-  // precomputed table of all one-million six-digit codes.
-  return sha256Hex(`${email}:${code}`);
-}
-
-async function sendVerificationEmail(env, email, code) {
-  const transport = String((env && env.MAIL_TRANSPORT) || '').toLowerCase();
-  if (transport === 'console') {
-    console.log(`[mail] verification code for ${email}: ${code}`);
-    return;
-  }
-
-  const key = env && env.RESEND_API_KEY;
-  if (!key) {
-    throw httpError(
-      503,
-      'mail_not_configured',
-      'Email delivery is not configured on this deployment. Set RESEND_API_KEY and MAIL_FROM for the Pages project.'
-    );
-  }
-
-  const from = (env && env.MAIL_FROM) || 'Dr. Martin <onboarding@resend.dev>';
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: [email],
-      subject: 'Ask Dr. Martin - your verification code',
-      text: `Your verification code is ${code}\n\nEnter it on the sign-up form within 10 minutes. If you did not try to create an account, ignore this email.\n\nDr. Martin`,
-      html:
-        `<p>Your verification code is <strong style="font-size:20px;letter-spacing:3px">${code}</strong></p>` +
-        '<p>Enter it on the sign-up form within 10 minutes. If you did not try to create an account, ignore this email.</p>' +
-        '<p>Dr. Martin</p>'
-    })
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    console.error('[mail] Resend rejected the message', response.status, detail.slice(0, 300));
-    if (response.status === 403) {
-      // Resend only delivers to the account owner until a domain is verified.
-      throw httpError(
-        502,
-        'mail_domain_unverified',
-        'Resend is still in test mode: verify a sending domain in Resend, then set MAIL_FROM to an address on that domain.'
-      );
-    }
-    throw httpError(502, 'mail_failed', 'The verification email could not be sent. Try again in a moment.');
-  }
-}
-
-async function sendCode(request, db, env) {
-  const body = await readJson(request);
-  const email = normalizeEmail(body.email);
-  if (!isEmail(email)) return fail(400, 'invalid_email', 'Enter a valid email address.');
-
-  const existing = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
-  if (existing) return fail(409, 'email_taken', 'That email is already registered. Try logging in.');
-
-  const now = Date.now();
-  const row = await db
-    .prepare('SELECT sent_at, window_start, window_count FROM email_codes WHERE email = ?')
-    .bind(email)
-    .first();
-
-  if (row) {
-    const sinceSent = now - new Date(row.sent_at).getTime();
-    if (sinceSent < CODE_COOLDOWN_MS) {
-      const wait = Math.ceil((CODE_COOLDOWN_MS - sinceSent) / 1000);
-      return fail(429, 'code_too_soon', `Wait ${wait} more seconds before requesting another code.`);
-    }
-  }
-
-  const continuingWindow = Boolean(row) && now - new Date(row.window_start).getTime() < CODE_WINDOW_MS;
-  const windowStart = continuingWindow ? row.window_start : new Date(now).toISOString();
-  const windowCount = continuingWindow ? Number(row.window_count || 0) + 1 : 1;
-  if (windowCount > CODE_WINDOW_MAX) {
-    return fail(429, 'code_limit', 'Too many codes requested for this address. Try again in an hour.');
-  }
-
-  const code = randomCode();
-  const sentAt = new Date(now).toISOString();
-  const expiresAt = new Date(now + CODE_TTL_MS).toISOString();
-
-  await db
-    .prepare(
-      `INSERT INTO email_codes (email, code_hash, expires_at, attempts, sent_at, window_start, window_count)
-       VALUES (?, ?, ?, 0, ?, ?, ?)
-       ON CONFLICT(email) DO UPDATE SET
-         code_hash = excluded.code_hash,
-         expires_at = excluded.expires_at,
-         attempts = 0,
-         sent_at = excluded.sent_at,
-         window_start = excluded.window_start,
-         window_count = excluded.window_count`
-    )
-    .bind(email, await codeHash(email, code), expiresAt, sentAt, windowStart, windowCount)
-    .run();
-
-  try {
-    await sendVerificationEmail(env, email, code);
-  } catch (err) {
-    // Nothing was delivered, so drop the row: the next attempt should not have
-    // to wait out the cooldown.
-    await db.prepare('DELETE FROM email_codes WHERE email = ?').bind(email).run();
-    throw err;
-  }
-
-  return json(200, { sent: true, email, expiresAt, resendAfter: CODE_COOLDOWN_MS / 1000 });
-}
-
-async function consumeCode(db, email, code) {
-  const row = await db
-    .prepare('SELECT code_hash, expires_at, attempts FROM email_codes WHERE email = ?')
-    .bind(email)
-    .first();
-
-  if (!row) return { ok: false, response: fail(400, 'code_missing', 'Request a verification code first.') };
-
-  if (new Date(row.expires_at).getTime() <= Date.now()) {
-    await db.prepare('DELETE FROM email_codes WHERE email = ?').bind(email).run();
-    return { ok: false, response: fail(400, 'code_expired', 'That code has expired. Send a new one.') };
-  }
-
-  if (Number(row.attempts) >= CODE_MAX_ATTEMPTS) {
-    await db.prepare('DELETE FROM email_codes WHERE email = ?').bind(email).run();
-    return { ok: false, response: fail(429, 'code_locked', 'Too many wrong codes. Send a new one.') };
-  }
-
-  if ((await codeHash(email, code)) !== row.code_hash) {
-    await db.prepare('UPDATE email_codes SET attempts = attempts + 1 WHERE email = ?').bind(email).run();
-    return { ok: false, response: fail(400, 'invalid_code', 'That code does not match. Check the email and try again.') };
-  }
-
-  // The row is removed once the account exists, so a race with the username
-  // check does not force the user to request a new code.
-  return { ok: true };
-}
-
 function publicUser(row) {
   return {
     id: Number(row.id),
@@ -256,7 +98,6 @@ async function register(request, db) {
   const body = await readJson(request);
   const email = normalizeEmail(body.email);
   const username = String(body.username || '').trim();
-  const code = String(body.code || '').trim();
 
   if (!isEmail(email)) return fail(400, 'invalid_email', 'Enter a valid email address.');
   if (!USERNAME_RE.test(username)) {
@@ -265,16 +106,12 @@ async function register(request, db) {
   if (typeof body.password !== 'string' || body.password.length < 8 || body.password.length > 200) {
     return fail(400, 'invalid_password', 'Use a password with at least 8 characters.');
   }
-  if (!/^\d{6}$/.test(code)) return fail(400, 'invalid_code', 'Enter the 6-digit code from the email.');
 
   const existing = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
   if (existing) return fail(409, 'email_taken', 'That email is already registered. Try logging in.');
 
   const taken = await db.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
   if (taken) return fail(409, 'username_taken', 'That username is taken. Try another one.');
-
-  const check = await consumeCode(db, email, code);
-  if (!check.ok) return check.response;
 
   const passwordHash = await hashPassword(body.password);
   const createdAt = new Date().toISOString();
@@ -293,7 +130,6 @@ async function register(request, db) {
     throw err;
   }
 
-  await db.prepare('DELETE FROM email_codes WHERE email = ?').bind(email).run();
   const user = { id: Number(info.meta.last_row_id), email, username, createdAt };
   return issueSession(db, user, 201);
 }
