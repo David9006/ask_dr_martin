@@ -605,7 +605,11 @@
         apiKey ? 'success' : 'info'
       );
       closeModal(settingsModal);
-    }).catch(function () {
+    }).catch(function (err) {
+      if (err && err.code === 'schema_missing') {
+        toast('The server database needs its schema applied before settings can be saved.', 'error');
+        return;
+      }
       toast('Could not save the settings to your account. Check the connection and try again.', 'error');
     });
   });

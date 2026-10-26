@@ -6,8 +6,10 @@
   "description": "Ask Dr. Martin — static front end plus a Cloudflare Pages Functions API backed by D1",
   "scripts": {
     "start": "node server/dev.mjs",
-    "dev": "wrangler pages dev public --d1 DB=ask-dr-martin-db",
-    "deploy": "wrangler pages deploy public"
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy public",
+    "db:init": "wrangler d1 execute ask-dr-martin-db --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute ask-dr-martin-db --local --file=./schema.sql"
   },
   "engines": {
     "node": ">=22.5.0"

@@ -45,6 +45,17 @@ export async function handleApi(request, env, options = {}) {
         return fail(404, 'not_found', 'Unknown API route.');
     }
   } catch (err) {
+    // A missing table almost always means schema.sql was never applied to this
+    // database; say so instead of a generic 500.
+    if (/no such table/i.test(String(err && err.message))) {
+      console.error('[api] missing table', err.message);
+      return fail(
+        503,
+        'schema_missing',
+        'The database is missing a table. Apply the schema: npx wrangler d1 execute ask-dr-martin-db --remote --file=./schema.sql'
+      );
+    }
+
     const status = err.status || 500;
     if (status >= 500) console.error('[api]', err);
     return fail(status, err.code || 'server_error', status >= 500 ? 'Unexpected server error.' : err.message);

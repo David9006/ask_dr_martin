@@ -3,8 +3,10 @@
 #   functions/  Pages Functions served at /api/*
 #   D1          database bound as `DB`
 #
-# Replace database_id with the value printed by:
+# database_id comes from the output of:
 #   npx wrangler d1 create ask-dr-martin-db
+# After editing schema.sql, apply it to the deployed database with:
+#   npm run db:init
 
 name = "ask-dr-martin"
 pages_build_output_dir = "public"

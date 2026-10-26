@@ -29,8 +29,8 @@ npm start            # node server/dev.mjs
 想看 Cloudflare 真正执行的效果，用 Wrangler：
 
 ```bash
-npx wrangler d1 execute ask-dr-martin-db --local --file=./schema.sql   # 首次
-npx wrangler pages dev                                                # http://127.0.0.1:8787
+npm run db:init:local   # 首次，等价于 wrangler d1 execute ... --local --file=./schema.sql
+npm run dev             # http://127.0.0.1:8787
 ```
 
 也可以直接双击 `public/index.html`（`file://`）：页面会把账户请求发到
@@ -196,6 +196,9 @@ echo 'SETTINGS_KEY=dev-secret' > .dev.vars
 | `POST /api/settings` | `{baseUrl, model, apiKey}`，按用户 upsert，key 加密后入库 |
 | `GET /api/health` | 健康检查 |
 
+改了 `schema.sql` 之后要重新应用一次（本地 `npm run db:init:local`，线上 `npm run db:init`），
+否则接口会直接返回 `{"error":{"code":"schema_missing"}}` 并在 message 里写明要跑哪条命令。
+
 安全措施：
 
 - 密码用 **PBKDF2-SHA256（10 万次迭代，WebCrypto）** 加盐哈希。这里不用 scrypt 是因为
@@ -291,8 +294,7 @@ npx wrangler login
 npx wrangler d1 create ask-dr-martin-db
 ```
 
-把输出里的 `database_id` 填进 [wrangler.toml](./wrangler.toml)（现在的
-`00000000-0000-0000-0000-000000000000` 只是让本地开发能跑起来的占位值）：
+把输出里的 `database_id` 填进 [wrangler.toml](./wrangler.toml)：
 
 ```toml
 [[d1_databases]]
@@ -304,8 +306,12 @@ database_id = "真正的 id"
 然后建表：
 
 ```bash
-npx wrangler d1 execute ask-dr-martin-db --remote --file=./schema.sql
+npm run db:init    # = wrangler d1 execute ask-dr-martin-db --remote --file=./schema.sql
 ```
+
+> `schema.sql` 里全是 `CREATE TABLE IF NOT EXISTS`，**重复执行是安全的**。
+> 以后只要 `schema.sql` 改了（比如新增 `user_settings`），就要再跑一次 `npm run db:init`，
+> 否则线上会报 `D1_ERROR: no such table: xxx`。
 
 ### 2. 部署
 
@@ -339,7 +345,8 @@ Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to 
 | 现象 | 原因 |
 | --- | --- |
 | `/api/*` 返回 `{"error":{"code":"db_unbound"}}` | 没绑定 D1，或绑定名不是 `DB` |
-| `/api/*` 返回 `no such table: users` | 没有执行 `schema.sql`（本地/远端搞混了） |
+| `/api/*` 返回 `no such table: xxx` | 没有执行 `schema.sql`（本地/远端搞混了）；远端用 `npm run db:init` |
+| `/api/*` 返回 `{"error":{"code":"schema_missing"}}` | 数据库缺表，执行 `npm run db:init`（远端）或 `npm run db:init:local`（本地） |
 | 静态页面 404 | Build output directory 没设成 `public` |
 | 登录一直 401 | 密码哈希算法只支持 PBKDF2；旧版 scrypt 本地库需要重建 |
 
