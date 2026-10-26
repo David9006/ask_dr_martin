@@ -655,6 +655,12 @@
       .replace(/click here/g, '<a class="inline-link" href="#guidelines" data-open-guidelines>click here</a>');
   }
 
+  var SIGN_OFF = /^(best|kind|warm|warmest)?\s*(regards|wishes)\s*,?$/i;
+
+  function isSignOff(line) {
+    return SIGN_OFF.test(line);
+  }
+
   function formatAnswer(text) {
     var blocks = String(text || '').trim().split(/\n{2,}/);
     return blocks.map(function (block) {
@@ -662,18 +668,29 @@
         return line.trim();
       }).filter(Boolean);
       if (!lines.length) return '';
-      if (lines.length === 1 && lines[0] === ADM.letter.signature) {
+
+      // A model may put "Best Regards," and "Dr. Martin" in one block or in
+      // separate ones; render both with the signature in italics.
+      var tail = '';
+      if (lines.length >= 2 && lines[lines.length - 1] === ADM.letter.signature && isSignOff(lines[lines.length - 2])) {
+        var name = lines.pop();
+        var signOff = lines.pop();
+        tail = '<p>' + escapeHtml(signOff) + '</p>' +
+          '<p class="answer-signature">' + escapeHtml(name) + '</p>';
+      } else if (lines.length === 1 && lines[0] === ADM.letter.signature) {
         return '<p class="answer-signature">' + escapeHtml(lines[0]) + '</p>';
       }
+      if (!lines.length) return tail;
+
       var isList = lines.every(function (line) {
         return /^([-*•]|\d+[.)])\s+/.test(line);
       });
       if (isList) {
         return '<ul>' + lines.map(function (line) {
           return '<li>' + inlineFormat(line.replace(/^([-*•]|\d+[.)])\s+/, '')) + '</li>';
-        }).join('') + '</ul>';
+        }).join('') + '</ul>' + tail;
       }
-      return '<p>' + inlineFormat(lines.join(' ')) + '</p>';
+      return '<p>' + inlineFormat(lines.join(' ')) + '</p>' + tail;
     }).join('');
   }
 
@@ -987,7 +1004,12 @@
       controller.abort();
     }, 45000);
 
-    ai.ask(question, { settings: settings, signal: controller.signal })
+    var account = ADM.auth.getUser();
+    ai.ask(question, {
+      settings: settings,
+      signal: controller.signal,
+      readerName: account ? account.username : ''
+    })
       .then(function (result) {
         clearTimeout(timer);
         if (activeController !== controller) return;

@@ -88,6 +88,24 @@ npx wrangler pages dev                                                # http://1
 5. 回答成功且已登录时，会 `POST /api/answers` 把「问题 + 回答」存进账号；报错、取消、
    只是命中了内置归档的情况都不记录。
 
+### 回答风格：模仿课本里的 Dr. Martin
+
+`public/js/ai.js` 里的 system prompt 是按课本那封回信反推出来的，刻意保留了他的口吻：
+
+| 特征 | 课本原文 | prompt 里的做法 |
+| --- | --- | --- |
+| **有用又没用**：语气笃定、内容宽泛 | “There is also no better way to know yourself…” | 要求「更权威而不是更具体」，只安慰、不诊断，不给剂量、文献、统计 |
+| **blood flowing** 反复出现 | 全信出现 3 次（flow of blood and oxygen to your brain / more blood to flow around your body / gets your blood flowing faster） | 明确要求至少用两次，并给出这三句作为措辞范本 |
+| 复述读者的话再作答 | “You are also somebody who worries about getting sick.” | 要求 “You are also somebody who …” / “If you are new to …” 这类回声句 |
+| 排比短句堆好处 | “It will help you… It will give you… It also strengthens…” | 要求 4–5 个 `It will / It makes / It also` 并列句连排 |
+| 貌似精确的数字 | “a thirty-minute run”、“ten minutes, then walk for five minutes” | 要求放一个「奇怪但通用」的数字 |
+| 固定结尾 | “click here. I hope this will help!” + `Best Regards,` / `Dr. Martin` | 要求同结构收尾，`Dr. Martin` 渲染为斜体 |
+| 不反问、不设界限 | 全信没有一句反问 | 明确禁止反问读者 |
+
+另外：登录用户提问时，会把昵称作为 `readerName` 传进去，让开场变成 `Hi <昵称>,`；
+未登录则用 `Hi there,`。prompt 里还留了一条安全阀——描述胸痛、晕厥、大出血、
+自伤念头等急症时，仍用同一口吻但必须补一句「今天就去见医生」。
+
 ## 配置 AI
 
 点击顶栏 ⚙ → **AI settings**：
