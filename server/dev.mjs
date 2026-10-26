@@ -14,13 +14,35 @@ const HOST = process.env.HOST || '127.0.0.1';
 const DB_FILE = process.env.ADM_DB
   ? path.resolve(process.env.ADM_DB)
   : path.join(here, 'data', 'ask-dr-martin.db');
-const SETTINGS_KEY = process.env.SETTINGS_KEY || '';
-// Local development has no mail provider by default, so verification codes are
-// printed to this terminal instead of being sent. Set RESEND_API_KEY (or
-// MAIL_TRANSPORT) to exercise the real delivery path.
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const MAIL_FROM = process.env.MAIL_FROM || '';
-const MAIL_TRANSPORT = process.env.MAIL_TRANSPORT || (RESEND_API_KEY ? '' : 'console');
+// `.dev.vars` is read so `npm start` sees the same secrets as `wrangler pages
+// dev`; anything already exported in the shell wins.
+function readDevVars(file) {
+  if (!fs.existsSync(file)) return {};
+  const values = {};
+  for (const raw of fs.readFileSync(file, 'utf8').split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq < 1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (value.length > 1 && (value[0] === '"' || value[0] === "'") && value.at(-1) === value[0]) {
+      value = value.slice(1, -1);
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+const fileVars = readDevVars(path.join(ROOT, '.dev.vars'));
+const setting = (name) => process.env[name] || fileVars[name] || '';
+
+const SETTINGS_KEY = setting('SETTINGS_KEY');
+// With no mail provider configured, verification codes are printed to this
+// terminal instead of being sent.
+const RESEND_API_KEY = setting('RESEND_API_KEY');
+const MAIL_FROM = setting('MAIL_FROM');
+const MAIL_TRANSPORT = setting('MAIL_TRANSPORT') || (RESEND_API_KEY ? '' : 'console');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

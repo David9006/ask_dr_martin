@@ -187,9 +187,12 @@ npx wrangler pages secret put RESEND_API_KEY --project-name ask-dr-martin
 # 发件人写在 wrangler.toml 的 [vars] MAIL_FROM，域名需在 Resend 里验证
 #   例：MAIL_FROM = "Dr. Martin <no-reply@yourdomain.com>"
 
-# 本地（Node 开发服务器）
-RESEND_API_KEY=re_xxx MAIL_FROM="Dr. Martin <no-reply@yourdomain.com>" npm start
+# 本地：npm start 和 wrangler pages dev 都会读 .dev.vars（已在 .gitignore 中）
+printf 'RESEND_API_KEY=re_xxx\nMAIL_FROM=Dr. Martin <no-reply@yourdomain.com>\n' >> .dev.vars
+npm start                        # shell 里 export 的同名变量优先于 .dev.vars
 ```
+
+> `RESEND_API_KEY` 留空时本地会自动回落到 `MAIL_TRANSPORT=console`，验证码打印在终端。
 
 | 情况 | 结果 |
 | --- | --- |
@@ -396,7 +399,8 @@ Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to 
 | `/api/*` 返回 `no such table: xxx` | 没有执行 `schema.sql`（本地/远端搞混了）；远端用 `npm run db:init` |
 | `/api/*` 返回 `{"error":{"code":"schema_missing"}}` | 数据库缺表，执行 `npm run db:init`（远端）或 `npm run db:init:local`（本地） |
 | 点 Send code 报 `mail_not_configured` | 没配 `RESEND_API_KEY`，见上面「配置注册验证码邮件」 |
-| 点 Send code 报 `mail_failed` | Resend 拒绝了请求：key 无效，或 `MAIL_FROM` 的域名没验证 |
+| 点 Send code 报 `mail_domain_unverified` | Resend 还处于测试模式：只能发到你 Resend 账号自己的邮箱，需先验证域名 |
+| 点 Send code 报 `mail_failed` | Resend 拒绝了请求：key 无效（401）或被限流 |
 | 收不到验证码 | 检查垃圾邮件；`code_limit` 表示这个地址一小时内已发 6 封 |
 | 静态页面 404 | Build output directory 没设成 `public` |
 | 登录一直 401 | 密码哈希算法只支持 PBKDF2；旧版 scrypt 本地库需要重建 |

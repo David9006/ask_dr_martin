@@ -143,6 +143,14 @@ async function sendVerificationEmail(env, email, code) {
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
     console.error('[mail] Resend rejected the message', response.status, detail.slice(0, 300));
+    if (response.status === 403) {
+      // Resend only delivers to the account owner until a domain is verified.
+      throw httpError(
+        502,
+        'mail_domain_unverified',
+        'Resend is still in test mode: verify a sending domain in Resend, then set MAIL_FROM to an address on that domain.'
+      );
+    }
     throw httpError(502, 'mail_failed', 'The verification email could not be sent. Try again in a moment.');
   }
 }
