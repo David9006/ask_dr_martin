@@ -276,6 +276,9 @@
     authForm.hidden = signedIn;
     accountPanel.hidden = !signedIn;
 
+    // AI settings follow the account when signed in, the browser otherwise.
+    ai.adoptAccountSettings();
+
     if (signedIn) {
       accountName.textContent = user.username;
       accountPanel.title = user.email;
@@ -536,17 +539,26 @@
   var modelInput = $('#ai-model');
   var keyInput = $('#ai-key');
   var toggleKeyButton = $('#toggle-key');
+  var hintEl = $('#settings-hint');
 
   function fillSettingsForm() {
     var settings = ai.loadSettings();
     baseInput.value = settings.baseUrl;
     modelInput.value = settings.model;
     keyInput.value = settings.apiKey;
+
+    var signedIn = Boolean(ADM.auth.getUser());
+    hintEl.textContent = signedIn
+      ? 'Saved to your account, so it follows you to any browser you sign in from. The key is sent only to the endpoint below when you ask a question.'
+      : 'Saved in this browser only. Sign in to keep these settings on your account instead. The key is sent only to the endpoint below.';
   }
 
   $('#open-settings').addEventListener('click', function () {
     fillSettingsForm();
     openModal(settingsModal);
+    if (ADM.auth.getUser()) {
+      ai.whenReady().then(fillSettingsForm);
+    }
   });
 
   toggleKeyButton.addEventListener('click', function () {
@@ -557,9 +569,14 @@
   });
 
   $('#clear-key').addEventListener('click', function () {
-    ai.clearApiKey();
-    keyInput.value = '';
-    toast('The API key was removed from this browser.', 'info');
+    ai.clearApiKey().then(function () {
+      keyInput.value = '';
+      toast(ADM.auth.getUser()
+        ? 'The API key was removed from your account.'
+        : 'The API key was removed from this browser.', 'info');
+    }).catch(function () {
+      toast('Could not remove the key. Check the connection and try again.', 'error');
+    });
   });
 
   settingsForm.addEventListener('submit', function (event) {
@@ -579,9 +596,18 @@
       return;
     }
 
-    ai.saveSettings({ baseUrl: baseUrl, model: model, apiKey: apiKey });
-    toast(apiKey ? 'AI settings saved for this browser.' : 'Settings saved. Add an API key to get new AI answers.', apiKey ? 'success' : 'info');
-    closeModal(settingsModal);
+    var signedIn = Boolean(ADM.auth.getUser());
+    ai.saveSettings({ baseUrl: baseUrl, model: model, apiKey: apiKey }).then(function () {
+      toast(
+        apiKey
+          ? (signedIn ? 'AI settings saved to your account.' : 'AI settings saved for this browser.')
+          : 'Settings saved. Add an API key to get new AI answers.',
+        apiKey ? 'success' : 'info'
+      );
+      closeModal(settingsModal);
+    }).catch(function () {
+      toast('Could not save the settings to your account. Check the connection and try again.', 'error');
+    });
   });
 
   /* ------------------------------------------------------------------ Q&A */
@@ -1082,7 +1108,12 @@
       previous.abort();
     }
 
-    var settings = ai.loadSettings();
+    ai.whenReady().then(function (settings) {
+      deliverQuestion(question, settings);
+    });
+  }
+
+  function deliverQuestion(question, settings) {
     var fallback = matchSeed(question);
 
     if (!ai.isConfigured(settings)) {

@@ -37,6 +37,10 @@ export async function handleApi(request, env, options = {}) {
         return await listAnswers(request, db);
       case 'POST /answers':
         return await saveAnswer(request, db);
+      case 'GET /settings':
+        return await getSettings(request, db);
+      case 'POST /settings':
+        return await saveSettings(request, db);
       default:
         return fail(404, 'not_found', 'Unknown API route.');
     }
@@ -242,6 +246,65 @@ async function saveAnswer(request, db) {
     .run();
   const row = await db.prepare('SELECT id, question, answer, created_at FROM answers WHERE id = ?').bind(id).first();
   return json(201, { answer: { ...mapAnswer(row), updated: false } });
+}
+
+/* --------------------------------------------------------------- settings */
+
+const MAX_BASE_URL = 300;
+const MAX_MODEL = 120;
+const MAX_API_KEY = 400;
+
+function mapSettings(row) {
+  if (!row) return null;
+  return { baseUrl: row.base_url, model: row.model, apiKey: row.api_key };
+}
+
+async function getSettings(request, db) {
+  const user = await currentUser(request, db);
+  if (!user) return fail(401, 'invalid_session', 'Please log in again.');
+
+  const row = await db
+    .prepare('SELECT base_url, model, api_key FROM user_settings WHERE user_id = ?')
+    .bind(user.id)
+    .first();
+
+  return json(200, { settings: mapSettings(row) });
+}
+
+async function saveSettings(request, db) {
+  const user = await currentUser(request, db);
+  if (!user) return fail(401, 'invalid_session', 'Please log in again.');
+
+  const body = await readJson(request);
+  const baseUrl = String(body.baseUrl || '').trim().replace(/\/+$/, '');
+  const model = String(body.model || '').trim();
+  const apiKey = String(body.apiKey || '').trim();
+
+  if (!/^https?:\/\/[^\s]+$/i.test(baseUrl) || baseUrl.length > MAX_BASE_URL) {
+    return fail(400, 'invalid_base_url', 'Enter a full endpoint URL starting with http:// or https://.');
+  }
+  if (!model || model.length > MAX_MODEL) {
+    return fail(400, 'invalid_model', 'Enter the model name your endpoint expects.');
+  }
+  if (apiKey.length > MAX_API_KEY) {
+    return fail(400, 'invalid_api_key', 'That API key is too long.');
+  }
+
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO user_settings (user_id, base_url, model, api_key, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         base_url = excluded.base_url,
+         model = excluded.model,
+         api_key = excluded.api_key,
+         updated_at = excluded.updated_at`
+    )
+    .bind(user.id, baseUrl, model, apiKey, now)
+    .run();
+
+  return json(200, { settings: { baseUrl, model, apiKey } });
 }
 
 /* ------------------------------------------------------- login throttling */

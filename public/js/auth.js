@@ -149,6 +149,25 @@
       });
   }
 
+  function getSettings() {
+    return request('/api/settings').then(function (payload) {
+      return payload.settings || null;
+    });
+  }
+
+  function saveSettings(settings) {
+    return request('/api/settings', {
+      method: 'POST',
+      body: {
+        baseUrl: settings.baseUrl,
+        model: settings.model,
+        apiKey: settings.apiKey
+      }
+    }).then(function (payload) {
+      return payload.settings;
+    });
+  }
+
   ADM.auth = {
     apiBase: apiBase,
     AuthError: AuthError,
@@ -160,6 +179,8 @@
     logout: logout,
     restore: restore,
     listAnswers: listAnswers,
-    saveAnswer: saveAnswer
+    saveAnswer: saveAnswer,
+    getSettings: getSettings,
+    saveSettings: saveSettings
   };
 })();

@@ -120,13 +120,23 @@ npx wrangler pages dev                                                # http://1
 | --- | --- |
 | Endpoint base URL | 默认 `https://api.openai.com/v1`，也可填任何 OpenAI 兼容服务 |
 | Model | 默认 `gpt-4o-mini`，填服务商支持的模型名 |
-| API key | 只保存在当前浏览器的 `localStorage`，不会写进代码 |
+| API key | 已登录时存进你的账号（D1 的 `user_settings`），未登录时存在本机 `localStorage` |
+
+**保存位置随登录状态切换：**
+
+- **已登录** → `GET/POST /api/settings` 读写服务器，换浏览器登录同一账号会自动带过来；
+  本机的 `localStorage` 副本会被删除，避免共用电脑时把 key 留给下一个人。
+- **未登录** → 只写 `localStorage("adm.ai.settings")`，行为与以前一致。
+- **迁移**：如果先在未登录状态填了 key，然后注册/登录，且账号里还没有设置，这份 key 会被
+  上传到账号并从本机删除；账号里已有设置则以账号为准。
 
 注意：
 
 - 浏览器直连要求该接口允许来自本页面的 **CORS** 请求；不允许时页面会提示网络错误。
-- key 保存在 `localStorage("adm.ai.settings")` 中，同域下的脚本可以读取，因此只建议在
-  自己信任的电脑和浏览器上使用；做公开部署时应改成由后端代理请求。
+- 服务器按账户保存 key，是为了让已登录用户在不同设备上免重复填写。**它目前以明文存在 D1
+  里**，只有该用户自己的会话能读回；如果你介意，可以在 Workers 里用 `env` 密钥做
+  AES-GCM 加密后再写入（`src/api/crypto.js` 已经有 WebCrypto 用法可复用）。
+- 不要从公开仓库泄漏别人的 key；本项目的代码里没有任何硬编码密钥。
 - 不填 key 时页面其它功能（标签页、订阅表单、归档回答）完全可用。
 
 ## 账户服务
@@ -155,6 +165,8 @@ npx wrangler pages dev                                                # http://1
 | `GET /api/auth/me` | 校验令牌并返回当前用户 |
 | `GET /api/answers` | 当前用户保存的问答 |
 | `POST /api/answers` | `{question, answer}`，同一个问题会更新而不是重复插入 |
+| `GET /api/settings` | 当前用户的 AI 设置，没有则返回 `{"settings":null}` |
+| `POST /api/settings` | `{baseUrl, model, apiKey}`，按用户 upsert |
 | `GET /api/health` | 健康检查 |
 
 安全措施：
@@ -169,15 +181,15 @@ npx wrangler pages dev                                                # http://1
 - 请求体上限 64 KB；本地静态服务做了目录穿越防护。
 - 问答按用户隔离，其他账户看不到你的记录。
 
-**注意**：会话令牌和 AI key 仍存在浏览器 `localStorage`。公开上线前建议再加邮箱验证、
-密码重置和更严格的风控。
+**注意**：会话令牌仍存在浏览器 `localStorage`；AI key 登录后存放在 D1 的 `user_settings`
+表里（明文，仅本账户可读）。公开上线前建议再加邮箱验证、密码重置和更严格的风控。
 
 ## 本地存储
 
 | key | 内容 |
 | --- | --- |
 | `adm.session` | 登录令牌与当前用户信息 |
-| `adm.ai.settings` | AI 接口地址、模型、API key |
+| `adm.ai.settings` | **仅未登录时**的 AI 接口地址、模型、API key |
 | `adm.qa.history` | 未登录时的提问与回答（最多 20 条） |
 | `adm.api.base` | （可选）`file://` 下覆盖账户服务地址 |
 

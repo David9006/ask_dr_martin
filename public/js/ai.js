@@ -68,6 +68,13 @@
   AIError.prototype = Object.create(Error.prototype);
   AIError.prototype.constructor = AIError;
 
+  // Settings live on the account when the reader is signed in, and in
+  // localStorage otherwise. `scope` records which one is active so a signed-in
+  // reader never reads another person's key off a shared device.
+  var active = null;
+  var scope = 'local';
+  var pending = null;
+
   function readStorage() {
     try {
       var raw = localStorage.getItem(SETTINGS_KEY);
@@ -77,27 +84,122 @@
     }
   }
 
-  function loadSettings() {
-    var stored = readStorage() || {};
+  function normalize(stored) {
+    var source = stored || {};
     return {
-      baseUrl: typeof stored.baseUrl === 'string' && stored.baseUrl.trim() ? stored.baseUrl.trim() : DEFAULTS.baseUrl,
-      model: typeof stored.model === 'string' && stored.model.trim() ? stored.model.trim() : DEFAULTS.model,
-      apiKey: typeof stored.apiKey === 'string' ? stored.apiKey : ''
+      baseUrl: typeof source.baseUrl === 'string' && source.baseUrl.trim() ? source.baseUrl.trim() : DEFAULTS.baseUrl,
+      model: typeof source.model === 'string' && source.model.trim() ? source.model.trim() : DEFAULTS.model,
+      apiKey: typeof source.apiKey === 'string' ? source.apiKey : ''
     };
   }
 
+  function writeLocal(settings) {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (err) {
+      /* private modes: the in-memory copy still works for this page load */
+    }
+  }
+
+  function clearLocal() {
+    try {
+      localStorage.removeItem(SETTINGS_KEY);
+    } catch (err) {
+      /* nothing to clear */
+    }
+  }
+
+  function loadSettings() {
+    if (!active) active = normalize(readStorage());
+    return active;
+  }
+
+  function currentScope() {
+    return scope;
+  }
+
+  function useLocalSettings() {
+    scope = 'local';
+    pending = null;
+    active = normalize(readStorage());
+    return active;
+  }
+
+  function applyAccountSettings(remote) {
+    scope = 'account';
+    active = normalize(remote);
+    return active;
+  }
+
+  // Called whenever a session starts or ends. On sign-in the account copy wins;
+  // if the account has none yet, a key typed while signed out is adopted and the
+  // local copy is removed so it does not leak to the next person on this device.
+  function adoptAccountSettings() {
+    if (!ADM.auth || !ADM.auth.getUser()) {
+      return Promise.resolve(useLocalSettings());
+    }
+
+    scope = 'account';
+    var local = normalize(readStorage());
+
+    pending = ADM.auth.getSettings().then(function (remote) {
+      if (remote && (remote.apiKey || remote.baseUrl !== DEFAULTS.baseUrl || remote.model !== DEFAULTS.model)) {
+        clearLocal();
+        return applyAccountSettings(remote);
+      }
+      if (local.apiKey) {
+        return ADM.auth.saveSettings(local).then(function (saved) {
+          clearLocal();
+          return applyAccountSettings(saved);
+        }).catch(function () {
+          return applyAccountSettings(null);
+        });
+      }
+      return applyAccountSettings(null);
+    }).catch(function () {
+      return applyAccountSettings(null);
+    });
+
+    return pending;
+  }
+
+  function whenReady() {
+    if (scope === 'account' && pending) {
+      return pending.then(function () {
+        return loadSettings();
+      });
+    }
+    return Promise.resolve(loadSettings());
+  }
+
   function saveSettings(patch) {
-    var next = loadSettings();
+    var next = normalize(loadSettings());
     if (patch && typeof patch.baseUrl === 'string') next.baseUrl = patch.baseUrl.trim();
     if (patch && typeof patch.model === 'string') next.model = patch.model.trim();
     if (patch && typeof patch.apiKey === 'string') next.apiKey = patch.apiKey.trim();
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-    } catch (err) {
-      /* storage can be unavailable in private modes; the in-memory form still works this session */
+
+    if (scope === 'account' && ADM.auth && ADM.auth.getUser()) {
+      var previous = active;
+      active = next;
+      return ADM.auth.saveSettings(next).catch(function (err) {
+        active = previous;
+        throw new AuthSettingsError(err);
+      });
     }
-    return next;
+
+    active = next;
+    writeLocal(next);
+    return Promise.resolve(next);
   }
+
+  function AuthSettingsError(cause) {
+    this.name = 'AuthSettingsError';
+    this.code = (cause && cause.code) || 'settings_failed';
+    this.message = (cause && cause.message) || 'Could not save the settings to your account.';
+    this.cause = cause || null;
+  }
+  AuthSettingsError.prototype = Object.create(Error.prototype);
+  AuthSettingsError.prototype.constructor = AuthSettingsError;
 
   function clearApiKey() {
     return saveSettings({ apiKey: '' });
@@ -267,6 +369,10 @@
   ADM.ai = {
     defaults: DEFAULTS,
     loadSettings: loadSettings,
+    whenReady: whenReady,
+    scope: currentScope,
+    adoptAccountSettings: adoptAccountSettings,
+    useLocalSettings: useLocalSettings,
     saveSettings: saveSettings,
     clearApiKey: clearApiKey,
     isConfigured: isConfigured,

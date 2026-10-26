@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS answers (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  base_url TEXT NOT NULL,
+  model TEXT NOT NULL,
+  api_key TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS answers_user_question ON answers (user_id, lower(question));
 CREATE INDEX IF NOT EXISTS answers_user_created ON answers (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id);
