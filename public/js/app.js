@@ -549,8 +549,8 @@
 
     var signedIn = Boolean(ADM.auth.getUser());
     hintEl.textContent = signedIn
-      ? 'Saved to your account, so it follows you to any browser you sign in from. The key is sent only to the endpoint below when you ask a question.'
-      : 'Saved in this browser only. Sign in to keep these settings on your account instead. The key is sent only to the endpoint below.';
+      ? 'Saved to your account and encrypted at rest, so it follows you to any browser you sign in from. The key is sent only to the endpoint below when you ask a question.'
+      : 'Saved in this browser only. Sign in to keep these settings on your account instead, encrypted at rest. The key is sent only to the endpoint below.';
   }
 
   $('#open-settings').addEventListener('click', function () {

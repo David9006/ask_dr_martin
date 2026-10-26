@@ -14,6 +14,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const DB_FILE = process.env.ADM_DB
   ? path.resolve(process.env.ADM_DB)
   : path.join(here, 'data', 'ask-dr-martin.db');
+const SETTINGS_KEY = process.env.SETTINGS_KEY || '';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -33,7 +34,7 @@ const db = new NodeD1(DB_FILE);
 db.exec(fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8'));
 
 async function toResponse(request, ip) {
-  const apiResponse = await handleApi(request, { DB: db }, { ip });
+  const apiResponse = await handleApi(request, { DB: db, SETTINGS_KEY }, { ip });
   const body = Buffer.from(await apiResponse.arrayBuffer());
   const headers = {};
   apiResponse.headers.forEach((value, key) => {
@@ -105,5 +106,10 @@ server.listen(PORT, HOST, () => {
   console.log(`Ask Dr. Martin dev server: http://${HOST}:${PORT}/`);
   console.log(`Static files: ${PUBLIC_DIR}`);
   console.log(`Local database: ${DB_FILE}`);
+  console.log(
+    SETTINGS_KEY
+      ? 'AI keys are encrypted at rest with SETTINGS_KEY.'
+      : 'SETTINGS_KEY is not set: AI keys will be stored unencrypted locally.'
+  );
   console.log('Deploy target: Cloudflare Pages (functions/ + D1)');
 });

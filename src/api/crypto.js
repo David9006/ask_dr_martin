@@ -68,6 +68,54 @@ export async function verifyPassword(password, stored) {
   }
 }
 
+/* ------------------------------------------------ encrypted AI settings */
+
+// Stored keys use "enc.v1.<iv>.<ciphertext>" with AES-GCM, so the D1 row never
+// contains a usable API key. A value without the prefix is a legacy plaintext
+// key from before encryption existed and is still readable.
+
+const SETTINGS_PREFIX = 'enc.v1.';
+const IV_BYTES = 12;
+
+async function settingsKey(secret) {
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(String(secret)));
+  return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+export async function encryptSecret(plain, secret) {
+  const text = String(plain || '');
+  if (!text) return '';
+  if (!secret) return text;
+
+  const key = await settingsKey(secret);
+  const iv = randomBytes(IV_BYTES);
+  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(text));
+  return SETTINGS_PREFIX + base64url(iv) + '.' + base64url(new Uint8Array(cipher));
+}
+
+export async function decryptSecret(stored, secret) {
+  const value = String(stored || '');
+  if (!value) return '';
+  if (!value.startsWith(SETTINGS_PREFIX)) return value;
+  if (!secret) return '';
+
+  try {
+    const parts = value.split('.');
+    const iv = fromBase64url(parts[2]);
+    const data = fromBase64url(parts[3]);
+    const key = await settingsKey(secret);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+    return new TextDecoder().decode(plain);
+  } catch (err) {
+    // Wrong or rotated secret: the stored key cannot be read again.
+    return '';
+  }
+}
+
+export function isEncrypted(value) {
+  return String(value || '').startsWith(SETTINGS_PREFIX);
+}
+
 export function randomToken() {
   return base64url(randomBytes(32));
 }

@@ -1,5 +1,5 @@
 import { fail, json, readJson, isEmail, normalizeEmail, bearerToken } from './http.js';
-import { hashPassword, verifyPassword, randomToken, sha256Hex } from './crypto.js';
+import { hashPassword, verifyPassword, randomToken, sha256Hex, encryptSecret, decryptSecret } from './crypto.js';
 
 const SESSION_DAYS = 30;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -38,9 +38,9 @@ export async function handleApi(request, env, options = {}) {
       case 'POST /answers':
         return await saveAnswer(request, db);
       case 'GET /settings':
-        return await getSettings(request, db);
+        return await getSettings(request, db, env.SETTINGS_KEY);
       case 'POST /settings':
-        return await saveSettings(request, db);
+        return await saveSettings(request, db, env.SETTINGS_KEY);
       default:
         return fail(404, 'not_found', 'Unknown API route.');
     }
@@ -254,12 +254,7 @@ const MAX_BASE_URL = 300;
 const MAX_MODEL = 120;
 const MAX_API_KEY = 400;
 
-function mapSettings(row) {
-  if (!row) return null;
-  return { baseUrl: row.base_url, model: row.model, apiKey: row.api_key };
-}
-
-async function getSettings(request, db) {
+async function getSettings(request, db, secret) {
   const user = await currentUser(request, db);
   if (!user) return fail(401, 'invalid_session', 'Please log in again.');
 
@@ -268,10 +263,19 @@ async function getSettings(request, db) {
     .bind(user.id)
     .first();
 
-  return json(200, { settings: mapSettings(row) });
+  if (!row) return json(200, { settings: null, encrypted: Boolean(secret) });
+
+  return json(200, {
+    settings: {
+      baseUrl: row.base_url,
+      model: row.model,
+      apiKey: await decryptSecret(row.api_key, secret)
+    },
+    encrypted: Boolean(secret)
+  });
 }
 
-async function saveSettings(request, db) {
+async function saveSettings(request, db, secret) {
   const user = await currentUser(request, db);
   if (!user) return fail(401, 'invalid_session', 'Please log in again.');
 
@@ -291,6 +295,8 @@ async function saveSettings(request, db) {
   }
 
   const now = new Date().toISOString();
+  const storedKey = await encryptSecret(apiKey, secret);
+
   await db
     .prepare(
       `INSERT INTO user_settings (user_id, base_url, model, api_key, updated_at)
@@ -301,10 +307,10 @@ async function saveSettings(request, db) {
          api_key = excluded.api_key,
          updated_at = excluded.updated_at`
     )
-    .bind(user.id, baseUrl, model, apiKey, now)
+    .bind(user.id, baseUrl, model, storedKey, now)
     .run();
 
-  return json(200, { settings: { baseUrl, model, apiKey } });
+  return json(200, { settings: { baseUrl, model, apiKey }, encrypted: Boolean(secret) });
 }
 
 /* ------------------------------------------------------- login throttling */

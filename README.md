@@ -19,6 +19,7 @@ npm start            # node server/dev.mjs
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
+| `SETTINGS_KEY` | 空 | 加密 D1 中 AI key 的主密钥；为空则以明文存储 |
 | `PORT` | `8787` | 监听端口 |
 | `HOST` | `127.0.0.1` | 监听地址 |
 | `ADM_DB` | `server/data/ask-dr-martin.db` | 本地 SQLite 文件路径 |
@@ -133,11 +134,37 @@ npx wrangler pages dev                                                # http://1
 注意：
 
 - 浏览器直连要求该接口允许来自本页面的 **CORS** 请求；不允许时页面会提示网络错误。
-- 服务器按账户保存 key，是为了让已登录用户在不同设备上免重复填写。**它目前以明文存在 D1
-  里**，只有该用户自己的会话能读回；如果你介意，可以在 Workers 里用 `env` 密钥做
-  AES-GCM 加密后再写入（`src/api/crypto.js` 已经有 WebCrypto 用法可复用）。
+- 服务器按账户保存 key，是为了让已登录用户在不同设备上免重复填写。**入库前会用
+  `SETTINGS_KEY` 做 AES-GCM 加密**：D1 里只会出现 `enc.v1.<iv>.<密文>`，看不到明文
+  （配置方法见下）。
 - 不要从公开仓库泄漏别人的 key；本项目的代码里没有任何硬编码密钥。
 - 不填 key 时页面其它功能（标签页、订阅表单、归档回答）完全可用。
+
+### 配置加密密钥 `SETTINGS_KEY`
+
+`SETTINGS_KEY` 是一个任意长随机字符串（建议 32 字节以上），只用来加密 D1 里的 AI key：
+服务器用它的 SHA-256 作为 AES-256-GCM 密钥，每次写入生成新的 12 字节 IV。
+
+```bash
+# 线上（Cloudflare Pages）
+openssl rand -base64 32          # 生成一个随机值
+npx wrangler pages secret put SETTINGS_KEY --project-name ask-dr-martin
+
+# 本地（Node 开发服务器）
+SETTINGS_KEY=dev-secret npm start
+
+# 本地（wrangler pages dev，写在 .dev.vars，已在 .gitignore 中）
+echo 'SETTINGS_KEY=dev-secret' > .dev.vars
+```
+
+行为说明：
+
+| 情况 | 结果 |
+| --- | --- |
+| 有 `SETTINGS_KEY` | 新写入的 key 一律加密；接口返回 `encrypted: true` |
+| 没有 `SETTINGS_KEY` | 退化为明文存储，接口返回 `encrypted: false`，开发服务器启动时会打印警告 |
+| 历史明文数据 | 仍能正常读回，用户下次保存设置时会自动改写成密文 |
+| 更换/丢失密钥 | 旧密文无法解密，接口对该用户返回空 key（endpoint 与 model 保留），需要重新填写 key |
 
 ## 账户服务
 
@@ -165,8 +192,8 @@ npx wrangler pages dev                                                # http://1
 | `GET /api/auth/me` | 校验令牌并返回当前用户 |
 | `GET /api/answers` | 当前用户保存的问答 |
 | `POST /api/answers` | `{question, answer}`，同一个问题会更新而不是重复插入 |
-| `GET /api/settings` | 当前用户的 AI 设置，没有则返回 `{"settings":null}` |
-| `POST /api/settings` | `{baseUrl, model, apiKey}`，按用户 upsert |
+| `GET /api/settings` | 当前用户的 AI 设置（key 解密后返回），没有则 `{"settings":null}`；另有 `encrypted` 标记 |
+| `POST /api/settings` | `{baseUrl, model, apiKey}`，按用户 upsert，key 加密后入库 |
 | `GET /api/health` | 健康检查 |
 
 安全措施：
@@ -182,7 +209,7 @@ npx wrangler pages dev                                                # http://1
 - 问答按用户隔离，其他账户看不到你的记录。
 
 **注意**：会话令牌仍存在浏览器 `localStorage`；AI key 登录后存放在 D1 的 `user_settings`
-表里（明文，仅本账户可读）。公开上线前建议再加邮箱验证、密码重置和更严格的风控。
+表里，并用 `SETTINGS_KEY` 做 AES-GCM 加密（未配置该变量时退化为明文）。公开上线前建议再加邮箱验证、密码重置和更严格的风控。
 
 ## 本地存储
 
