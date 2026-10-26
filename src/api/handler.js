@@ -220,7 +220,14 @@ const FEED_MAX = 100;
 // The public feed shows the author separately, so drop that line for every
 // entry that is not the requester's own.
 function stripGreeting(text) {
-  return String(text || '').replace(/^\s*hi[\s\S]{0,40}?,?\s*\n\s*\n/i, '').trim();
+  const value = String(text || '');
+  const lines = value.split('\n');
+  // Only the first line, and only when it reads as a greeting on its own
+  // ("Hi Jeremy,"), so "His blood pressure is high" is left alone.
+  if (lines.length > 1 && /^\s*hi\b[^,\n]{0,40}[,!.?]\s*$/i.test(lines[0])) {
+    return lines.slice(1).join('\n').replace(/^\s*\n+/, '').trim();
+  }
+  return value.trim();
 }
 
 async function listPublicQuestions(request, db) {
