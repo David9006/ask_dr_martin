@@ -915,6 +915,23 @@ main {
   color: #8298a5;
 }
 
+.qa-feed-status {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  margin-top: 10px;
+}
+
+.qa-feed-status:empty {
+  display: none;
+}
+
+.qa-feed-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
 .qa-answer {
   margin-top: 2px;
 }

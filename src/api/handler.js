@@ -33,6 +33,8 @@ export async function handleApi(request, env, options = {}) {
         return await logout(request, db);
       case 'GET /auth/me':
         return await me(request, db);
+      case 'GET /questions':
+        return await listPublicQuestions(request, db);
       case 'GET /answers':
         return await listAnswers(request, db);
       case 'POST /answers':
@@ -209,6 +211,62 @@ async function me(request, db) {
 
 function mapAnswer(row) {
   return { id: row.id, question: row.question, answer: row.answer, createdAt: row.created_at };
+}
+
+const FEED_DEFAULT = 50;
+const FEED_MAX = 100;
+
+// Answers open with a greeting addressed to whoever asked ("Hi Jeremy,").
+// The public feed shows the author separately, so drop that line for every
+// entry that is not the requester's own.
+function stripGreeting(text) {
+  return String(text || '').replace(/^\s*hi[\s\S]{0,40}?,?\s*\n\s*\n/i, '').trim();
+}
+
+async function listPublicQuestions(request, db) {
+  const url = new URL(request.url);
+  const limit = clampInt(url.searchParams.get('limit'), FEED_DEFAULT, 1, FEED_MAX);
+  const offset = clampInt(url.searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+
+  const user = await currentUser(request, db);
+
+  const [{ results }, count] = await Promise.all([
+    db
+      .prepare(
+        `SELECT a.id, a.question, a.answer, a.created_at, a.user_id, u.username
+         FROM answers a JOIN users u ON u.id = a.user_id
+         ORDER BY a.created_at DESC, a.id DESC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(limit, offset)
+      .all(),
+    db.prepare('SELECT count(*) AS total FROM answers').first()
+  ]);
+
+  const questions = (results || []).map((row) => {
+    const mine = Boolean(user) && row.user_id === user.id;
+    return {
+      id: row.id,
+      question: row.question,
+      answer: mine ? row.answer : stripGreeting(row.answer),
+      author: row.username,
+      mine,
+      createdAt: row.created_at
+    };
+  });
+
+  return json(200, {
+    questions,
+    total: (count && count.total) || 0,
+    limit,
+    offset
+  });
+}
+
+function clampInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
 }
 
 async function listAnswers(request, db) {

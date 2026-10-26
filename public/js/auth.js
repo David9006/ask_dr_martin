@@ -136,9 +136,11 @@
     });
   }
 
-  function listAnswers() {
-    return request('/api/answers').then(function (payload) {
-      return payload.answers || [];
+  function listQuestions(options) {
+    var opts = options || {};
+    var query = '?limit=' + (opts.limit || 50) + '&offset=' + (opts.offset || 0);
+    return request('/api/questions' + query).then(function (payload) {
+      return { questions: payload.questions || [], total: payload.total || 0 };
     });
   }
 
@@ -178,7 +180,7 @@
     login: login,
     logout: logout,
     restore: restore,
-    listAnswers: listAnswers,
+    listQuestions: listQuestions,
     saveAnswer: saveAnswer,
     getSettings: getSettings,
     saveSettings: saveSettings

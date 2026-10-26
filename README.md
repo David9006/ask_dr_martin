@@ -95,6 +95,12 @@ npm run dev             # http://127.0.0.1:8787
 5. 回答成功且已登录时，会 `POST /api/answers` 把「问题 + 回答」存进账号；报错、取消、
    只是命中了内置归档的情况都不记录。
 
+**Q&A 页是公开的**：列表来自 `GET /api/questions`，把**所有已登录用户**被回答过的问题汇总在
+一起（新的在前，每条显示 `用户名 · 日期`，自己那条显示 `You`），未登录也能浏览；
+超过 50 条时出现「Show older questions」按钮翻页。回答正文开头那句 `Hi <名字>,` 只对
+提问者自己显示，别人看到的是去掉称呼后的正文。未登录用户的回答只存在浏览器
+`localStorage` 里，不会出现在这个公共列表里。
+
 ### 回答风格：模仿课本里的 Dr. Martin
 
 `public/js/ai.js` 里的 system prompt 是按课本那封回信反推出来的，刻意保留了他的口吻：
@@ -190,7 +196,8 @@ echo 'SETTINGS_KEY=dev-secret' > .dev.vars
 | `POST /api/auth/login` | `{email, password}`，只接受邮箱 |
 | `POST /api/auth/logout` | 注销当前令牌 |
 | `GET /api/auth/me` | 校验令牌并返回当前用户 |
-| `GET /api/answers` | 当前用户保存的问答 |
+| `GET /api/questions` | **公开**：所有用户被回答过的问题，`?limit=`（默认 50，最大 100）`&offset=`；带令牌时每条会多一个 `mine` 标记 |
+| `GET /api/answers` | 当前用户保存的问答（Q&A 页面已改用 `/api/questions`） |
 | `POST /api/answers` | `{question, answer}`，同一个问题会更新而不是重复插入 |
 | `GET /api/settings` | 当前用户的 AI 设置（key 解密后返回），没有则 `{"settings":null}`；另有 `encrypted` 标记 |
 | `POST /api/settings` | `{baseUrl, model, apiKey}`，按用户 upsert，key 加密后入库 |
@@ -209,7 +216,9 @@ echo 'SETTINGS_KEY=dev-secret' > .dev.vars
 - 会话令牌 32 字节随机数，数据库只存 SHA-256 摘要，有效期 30 天，退出即删除。
 - 登录失败同一 IP + 账号 15 分钟内最多 8 次，超过返回 429（按 isolate 计数，属于尽力而为）。
 - 请求体上限 64 KB；本地静态服务做了目录穿越防护。
-- 问答按用户隔离，其他账户看不到你的记录。
+- `GET /api/answers` / `POST /api/answers` 按用户隔离；但 **`GET /api/questions` 是公开的**，
+  里面是所有人被回答过的问题（含提问者的用户名，用户名由邮箱前缀生成）。如果你不打算公开，
+  把这条路由删掉或加鉴权即可。
 
 **注意**：会话令牌仍存在浏览器 `localStorage`；AI key 登录后存放在 D1 的 `user_settings`
 表里，并用 `SETTINGS_KEY` 做 AES-GCM 加密（未配置该变量时退化为明文）。公开上线前建议再加邮箱验证、密码重置和更严格的风控。
@@ -233,14 +242,14 @@ public/                Cloudflare Pages 的构建输出目录
   js/config.js         可选：指向另一个域名的账户服务（默认同源）
   js/data.js           归档问答、俱乐部 / 新闻 / 服务、跑步指南数据
   js/ai.js             AI 设置读写、OpenAI 兼容请求、错误信息映射
-  js/auth.js           账户接口客户端与会话保存
-  js/app.js            标签页路由、账户表单、搜索与回答渲染、弹窗、toast
+  js/auth.js           账户 / 问答列表 / 设置接口客户端与会话保存
+  js/app.js            标签页路由、账户表单、搜索与回答渲染、公共问答列表、弹窗、toast
 
 functions/            Pages Functions（部署到 /api/*）
   api/[[path]].js     入口，转调 src/api/handler.js
 
 src/api/              共享业务逻辑（Pages 与本地 Node 都复用）
-  handler.js          账户与问答
+  handler.js          账户、问答（含公开列表）与设置
   http.js             JSON / CORS / 校验工具
   crypto.js           PBKDF2 哈希与会话令牌
 
@@ -250,7 +259,7 @@ server/               本地开发用（不会部署）
 
 schema.sql            建表语句（本地与 D1 通用）
 wrangler.toml         Pages 项目配置与 D1 绑定
-package.json          npm start / dev / deploy 脚本
+package.json          npm start / dev / deploy / db:init 脚本
 ```
 
 ## 发布到 GitHub

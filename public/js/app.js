@@ -153,7 +153,6 @@
 
   var authMode = 'login';
   var authBusy = false;
-  var accountAnswers = [];
 
   function fieldError(input, message) {
     if (!input) return;
@@ -254,22 +253,46 @@
     return err.message || 'Something went wrong. Please try again.';
   }
 
-  function loadAccountAnswers() {
-    if (!ADM.auth.getUser()) {
-      accountAnswers = [];
-      renderQAList();
-      renderHome();
+  var feed = { items: [], total: 0, loaded: false, loading: false, error: false, pendingReset: false };
+
+  function loadFeed(reset, options) {
+    if (feed.loading) {
+      // A sign-in can land while the first page is still in flight; remember to
+      // reload so the `mine` labels match the new session.
+      if (reset) feed.pendingReset = true;
       return;
     }
-    ADM.auth.listAnswers().then(function (answers) {
-      accountAnswers = answers;
+    var opts = options || {};
+    feed.loading = true;
+    var offset = reset ? 0 : feed.items.length;
+    var quiet = Boolean(opts.quiet);
+
+    ADM.auth.listQuestions({ offset: offset }).then(function (page) {
+      feed.items = (reset ? [] : feed.items).concat(page.questions);
+      feed.total = page.total;
+      feed.loaded = true;
+      feed.error = false;
+      feed.loading = false;
       renderQAList();
       renderHome();
+      runPendingReset();
     }).catch(function (err) {
-      if (err && err.code === 'invalid_session') return;
-      toast('Could not load your saved questions. Check the connection to the account service.', 'error');
+      feed.loading = false;
+      feed.error = true;
+      renderQAList();
+      runPendingReset();
+      if (quiet || (err && err.code === 'invalid_session')) return;
+      toast('Could not load the shared questions. Check the connection to the account service.', 'error');
     });
   }
+
+  function runPendingReset() {
+    if (!feed.pendingReset) return;
+    feed.pendingReset = false;
+    loadFeed(true, { quiet: true });
+  }
+
+  var appliedUserId;
 
   function applyAccount(user) {
     var signedIn = Boolean(user);
@@ -279,17 +302,22 @@
     // AI settings follow the account when signed in, the browser otherwise.
     ai.adoptAccountSettings();
 
+    // `mine` flags and the greeting in the answers depend on who is asking, so
+    // the feed is re-read only when the identity actually changes.
+    var identityChanged = appliedUserId !== (signedIn ? user.id : null);
+    appliedUserId = signedIn ? user.id : null;
+
     if (signedIn) {
       accountName.textContent = user.username;
       accountPanel.title = user.email;
-      loadAccountAnswers();
+      if (identityChanged) loadFeed(true, { quiet: true });
       return;
     }
 
-    accountAnswers = [];
     renderQAList();
     renderHome();
     showQAList(false);
+    if (identityChanged) loadFeed(true, { quiet: true });
   }
 
   function submitAuth(mode) {
@@ -839,13 +867,8 @@
       return;
     }
 
-    ADM.auth.saveAnswer(question, answer).then(function (saved) {
-      accountAnswers = accountAnswers.filter(function (entry) {
-        return entry.question.trim().toLowerCase() !== saved.question.trim().toLowerCase();
-      });
-      accountAnswers.unshift(saved);
-      renderQAList();
-      renderHome();
+    ADM.auth.saveAnswer(question, answer).then(function () {
+      loadFeed(true, { quiet: true });
     }).catch(function () {
       toast('That answer could not be saved to your account. Check the connection to the server.', 'error');
     });
@@ -853,13 +876,14 @@
 
   function renderQAList() {
     var signedIn = Boolean(ADM.auth.getUser());
-    var own = signedIn
-      ? accountAnswers.map(function (entry) {
+
+    var written = signedIn
+      ? feed.items.map(function (entry) {
         return {
           id: entry.id,
           question: entry.question,
-          kind: 'account',
-          meta: 'You · ' + formatDate(entry.createdAt)
+          kind: 'question',
+          meta: (entry.mine ? 'You' : entry.author) + ' · ' + formatDate(entry.createdAt)
         };
       })
       : history.map(function (entry) {
@@ -869,9 +893,16 @@
           kind: 'history',
           meta: 'Saved on this device · ' + formatDate(entry.at)
         };
-      });
+      }).concat(feed.items.map(function (entry) {
+        return {
+          id: entry.id,
+          question: entry.question,
+          kind: 'question',
+          meta: entry.author + ' · ' + formatDate(entry.createdAt)
+        };
+      }));
 
-    var items = own.concat(ADM.seedQA.map(function (entry) {
+    var items = written.concat(ADM.seedQA.map(function (entry) {
       return {
         id: entry.id,
         question: entry.question,
@@ -888,6 +919,49 @@
         '</button></li>'
       );
     }).join('');
+
+    renderFeedStatus();
+  }
+
+  function renderFeedStatus() {
+    if (!qaList) return;
+    var status = $('#qa-feed-status');
+    if (!status) {
+      status = document.createElement('div');
+      status.id = 'qa-feed-status';
+      status.className = 'qa-feed-status';
+      qaList.insertAdjacentElement('afterend', status);
+    }
+
+    if (feed.error) {
+      status.innerHTML = '<p class="qa-feed-note">The shared question list could not be loaded.</p>' +
+        '<button class="btn ghost small" type="button" id="qa-feed-retry">Try again</button>';
+      var retry = $('#qa-feed-retry');
+      if (retry) {
+        retry.addEventListener('click', function () {
+          loadFeed(true);
+        });
+      }
+      return;
+    }
+
+    var remaining = feed.total - feed.items.length;
+    if (remaining > 0) {
+      status.innerHTML = '<button class="btn ghost small" type="button" id="qa-feed-more">Show older questions (' +
+        remaining + ')</button>';
+      var more = $('#qa-feed-more');
+      if (more) {
+        more.addEventListener('click', function () {
+          more.disabled = true;
+          loadFeed(false);
+        });
+      }
+      return;
+    }
+
+    status.innerHTML = feed.loaded && feed.total
+      ? '<p class="qa-feed-note">' + feed.total + (feed.total === 1 ? ' answer' : ' answers') + ' from the community so far.</p>'
+      : '';
   }
 
   /* ----------------------------------------------------------------- home */
@@ -899,13 +973,15 @@
   function latestAnswer() {
     var user = ADM.auth.getUser();
 
-    if (user && accountAnswers.length) {
-      var saved = accountAnswers[0];
+    var mine = feed.items.filter(function (entry) {
+      return entry.mine;
+    })[0];
+    if (user && mine) {
       return {
-        question: saved.question,
-        text: saved.answer,
+        question: mine.question,
+        text: mine.answer,
         eyebrow: 'Your last answer',
-        meta: 'Answered ' + formatDate(saved.createdAt)
+        meta: 'Answered ' + formatDate(mine.createdAt)
       };
     }
 
@@ -916,6 +992,16 @@
         text: local.answer,
         eyebrow: 'Your last answer',
         meta: 'Saved on this device · ' + formatDate(local.at)
+      };
+    }
+
+    if (feed.items.length) {
+      var shared = feed.items[0];
+      return {
+        question: shared.question,
+        text: shared.answer,
+        eyebrow: 'Latest from the Q&A',
+        meta: 'Asked by ' + shared.author + ' · ' + formatDate(shared.createdAt)
       };
     }
 
@@ -972,7 +1058,7 @@
       homeLatest.innerHTML = '<p class="home-side-empty">No answers yet. Ask the first question above.</p>';
     }
 
-    var answers = ADM.seedQA.length + (ADM.auth.getUser() ? accountAnswers.length : history.length);
+    var answers = ADM.seedQA.length + feed.total + (ADM.auth.getUser() ? 0 : history.length);
     var answerStat = $('#home-stat-answers');
     var clubStat = $('#home-stat-clubs');
     var serviceStat = $('#home-stat-services');
@@ -1016,16 +1102,16 @@
       lastQuestionButton = button;
       var id = button.dataset.qaId;
 
-      if (button.dataset.qaKind === 'account') {
-        var saved = accountAnswers.filter(function (item) {
+      if (button.dataset.qaKind === 'question') {
+        var shared = feed.items.filter(function (item) {
           return item.id === id;
         })[0];
-        if (!saved) return;
+        if (!shared) return;
         showAnswer({
-          question: saved.question,
-          text: saved.answer,
-          eyebrow: 'Your question',
-          meta: 'Answered by Dr. Martin · ' + formatDate(saved.createdAt)
+          question: shared.question,
+          text: shared.answer,
+          eyebrow: shared.mine ? 'Your question' : 'Asked by ' + shared.author,
+          meta: 'Answered by Dr. Martin · ' + formatDate(shared.createdAt)
         });
         return;
       }
