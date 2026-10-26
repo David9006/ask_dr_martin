@@ -88,9 +88,72 @@
 
 <main>
   <section class="tab-panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
-    <article class="card letter-card">
-      <div class="letter-body" id="letter-body"></div>
-    </article>
+    <div class="home-wrap">
+      <div class="home-grid">
+        <article class="card home-intro">
+          <p class="home-eyebrow">The practice</p>
+          <h2>Straight answers about running, rest and staying well</h2>
+          <p class="home-lead">Dr. Martin has spent twenty years in general practice and still runs most mornings. This column is where he answers the questions readers send in — about training, injuries, sleep, hydration and the small habits that keep you healthy.</p>
+          <p class="home-lead">Type your question into the box at the top of the page and the answer opens on the Q&amp;A page. Sign in and every answer you receive is saved to your own list, ready for the next time you need it.</p>
+
+          <div class="home-actions">
+            <button class="btn primary" type="button" id="home-ask">Ask a question</button>
+            <button class="btn ghost" type="button" data-goto="qa">Browse the answers</button>
+          </div>
+
+          <dl class="home-stats">
+            <div>
+              <dt>Answers on file</dt>
+              <dd id="home-stat-answers">—</dd>
+            </div>
+            <div>
+              <dt>Clubs</dt>
+              <dd id="home-stat-clubs">—</dd>
+            </div>
+            <div>
+              <dt>Services</dt>
+              <dd id="home-stat-services">—</dd>
+            </div>
+          </dl>
+        </article>
+
+        <aside class="card home-side" aria-labelledby="home-latest-title">
+          <h3 id="home-latest-title">Latest answer</h3>
+          <div id="home-latest"></div>
+        </aside>
+      </div>
+
+      <article class="card home-sections">
+        <h2>Where to go next</h2>
+        <p class="panel-lead">Four ways into the site — pick the one that fits what you need today.</p>
+        <div class="home-links">
+          <button class="home-link" type="button" data-goto="qa">
+            <span class="home-link-title">Q&amp;A</span>
+            <span class="home-link-body">Ask a question, or read every answer in the archive.</span>
+          </button>
+          <button class="home-link" type="button" data-goto="clubs">
+            <span class="home-link-title">Clubs</span>
+            <span class="home-link-body">Run with other people — schedules, meeting points and levels.</span>
+          </button>
+          <button class="home-link" type="button" data-goto="services">
+            <span class="home-link-title">Services</span>
+            <span class="home-link-body">Consultations, health checks and injury screening.</span>
+          </button>
+          <button class="home-link" type="button" data-goto="news">
+            <span class="home-link-title">News</span>
+            <span class="home-link-body">Clinic hours, community runs and health campaigns.</span>
+          </button>
+        </div>
+      </article>
+
+      <article class="card home-news-card">
+        <div class="home-news-head">
+          <h2>From the practice</h2>
+          <button class="btn ghost small" type="button" data-goto="news">All news</button>
+        </div>
+        <ul class="news-list" id="home-news"></ul>
+      </article>
+    </div>
   </section>
 
   <section class="tab-panel" id="panel-clubs" role="tabpanel" aria-labelledby="tab-clubs" tabindex="0" hidden>

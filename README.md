@@ -60,15 +60,21 @@ npx wrangler pages dev                                                # http://1
 
 ### 内容卡片
 
-- **HOME**：Dr. Martin 给 Jeremy 的回信（与课本文字一致），卡片内保留细灰色滚动条；
-  "click here" 会打开跑步指南弹窗。
+- **HOME**：桌面式首页，不再放课本那封信。包含
+  1. **医生简介**：Dr. Martin 是谁、这栏做什么，配 `Ask a question`（滚动到顶部并聚焦提问框）
+     和 `Browse the answers`（切到 Q&A）两个按钮；
+  2. **数据条**：Answers on file / Clubs / Services 三个数字实时统计；
+  3. **Latest answer**：登录用户显示自己最近一条回答，未登录显示本机最近记录，都没有则回退到
+     内置归档；点 `Read the answer` 直接打开该答案的详情；
+  4. **Where to go next**：Q&A / Clubs / Services / News 四个入口卡片，点哪张切到哪个标签页；
+  5. **From the practice**：最新两条新闻 + `All news` 链接。
 - **CLUBS**：三个示例俱乐部，未登录时点加入会提示先登录，登录后按账户注册。
 - **NEWS**：诊所时间、社区跑、补水活动等示例新闻。
 - **SERVICES**：在线问诊、体检、营养与恢复计划、跑步损伤筛查。
 - **Q&A**：默认只显示问题列表；点进某条问题才切换到答案视图，左上角的
   “← All questions” 可以返回列表。提问统一使用页面顶部横幅里的输入框，不再重复放置。
   内置了课本中的提问（“I'm a bit fed up with getting sick all the time…”），它的回答与课本原图一致
-  （包含 “Hi Jeremy,” 抬头和署名）；HOME 里显示的信则去掉抬头。
+  （包含 “Hi Jeremy,” 抬头和署名）——那封信现在只作为这条归档答案存在，不再占用 Home 版面。
   登录用户问过并且**拿到了回答**的问题会自动保存到账号里，出现在列表最上面（`You · 日期`），
   换浏览器登录同一账号也能看到；未登录时这些记录只留在本机 `localStorage`。
 
@@ -303,7 +309,5 @@ Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to 
 - 横幅图片来自课本页面，已按你的说明取得版权许可；`assets/hero-banner.jpg` 中保留了
   医生照片与跑者剪影，仅把原图上的标题和搜索框抹掉，以便叠加可用的 HTML 控件。
   其余内容（俱乐部、新闻、服务）是示例数据，集中在 `js/data.js`，替换即可。
-- 桌面端回信卡片保留课本中的内部滚动条效果；窄屏（≤640px）会自动取消高度限制，
-  按普通页面滚动。
 - 本地数据库默认写在 `server/data/`（已在 `.gitignore` 中忽略），删掉它即可清空本地账户。
 - 线上数据在 D1 里，清空用 `npx wrangler d1 execute ask-dr-martin-db --remote --command "DELETE FROM answers; DELETE FROM sessions; DELETE FROM users;"`。

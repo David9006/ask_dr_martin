@@ -258,11 +258,13 @@
     if (!ADM.auth.getUser()) {
       accountAnswers = [];
       renderQAList();
+      renderHome();
       return;
     }
     ADM.auth.listAnswers().then(function (answers) {
       accountAnswers = answers;
       renderQAList();
+      renderHome();
     }).catch(function (err) {
       if (err && err.code === 'invalid_session') return;
       toast('Could not load your saved questions. Check the connection to the account service.', 'error');
@@ -283,6 +285,7 @@
 
     accountAnswers = [];
     renderQAList();
+    renderHome();
     showQAList(false);
   }
 
@@ -413,25 +416,6 @@
         '</article>'
       );
     }).join('');
-  }
-
-  function renderLetter() {
-    var container = $('#letter-body');
-    if (!container) return;
-
-    var paragraphs = ADM.letter.paragraphs.map(function (paragraph) {
-      if (typeof paragraph === 'string') {
-        return '<p>' + escapeHtml(paragraph) + '</p>';
-      }
-      return '<p>' + escapeHtml(paragraph.before) +
-        '<a class="inline-link" href="' + escapeHtml(paragraph.href) + '" data-open-guidelines>' +
-        escapeHtml(paragraph.linkText) + '</a>' +
-        escapeHtml(paragraph.after) + '</p>';
-    });
-
-    container.innerHTML = paragraphs.join('') +
-      '<p class="signoff">' + escapeHtml(ADM.letter.closing) + '</p>' +
-      '<p class="signature">' + escapeHtml(ADM.letter.signature) + '</p>';
   }
 
   function renderGuidelines() {
@@ -816,6 +800,7 @@
     history = history.slice(0, MAX_HISTORY);
     writeJSON(STORAGE.history, history);
     renderQAList();
+    renderHome();
   }
 
   function recordAnswer(question, answer) {
@@ -830,6 +815,7 @@
       });
       accountAnswers.unshift(saved);
       renderQAList();
+      renderHome();
     }).catch(function () {
       toast('That answer could not be saved to your account. Check the connection to the server.', 'error');
     });
@@ -873,6 +859,125 @@
       );
     }).join('');
   }
+
+  /* ----------------------------------------------------------------- home */
+
+  var homeLatest = $('#home-latest');
+  var homeNews = $('#home-news');
+  var homeAsk = $('#home-ask');
+
+  function latestAnswer() {
+    var user = ADM.auth.getUser();
+
+    if (user && accountAnswers.length) {
+      var saved = accountAnswers[0];
+      return {
+        question: saved.question,
+        text: saved.answer,
+        eyebrow: 'Your last answer',
+        meta: 'Answered ' + formatDate(saved.createdAt)
+      };
+    }
+
+    if (!user && history.length) {
+      var local = history[0];
+      return {
+        question: local.question,
+        text: local.answer,
+        eyebrow: 'Your last answer',
+        meta: 'Saved on this device · ' + formatDate(local.at)
+      };
+    }
+
+    var seed = ADM.seedQA[0];
+    if (!seed) return null;
+    return {
+      question: seed.question,
+      text: seed.answer,
+      eyebrow: 'From the archive',
+      meta: 'Archived answer · ' + (seed.author || 'reader')
+    };
+  }
+
+  function preview(text) {
+    var paragraphs = String(text || '').split(/\n{2,}/).map(function (block) {
+      return block.trim();
+    }).filter(function (block) {
+      if (!block) return false;
+      if (/^hi\b[^\n]{0,24},?$/i.test(block)) return false;
+      if (SIGN_OFF.test(block)) return false;
+      return block !== ADM.letter.signature;
+    });
+
+    var flat = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
+    if (flat.length <= 190) return flat;
+    return flat.slice(0, 187).replace(/[,;:.\s]+$/, '') + '…';
+  }
+
+  function renderHome() {
+    if (!homeLatest) return;
+
+    var item = latestAnswer();
+    if (item) {
+      homeLatest.innerHTML =
+        '<p class="home-eyebrow">' + escapeHtml(item.eyebrow) + '</p>' +
+        '<p class="home-side-question">' + escapeHtml(item.question) + '</p>' +
+        '<p class="home-side-preview">' + escapeHtml(preview(item.text)) + '</p>' +
+        '<span class="home-side-meta">' + escapeHtml(item.meta) + '</span>' +
+        '<button class="btn ghost small" type="button" id="home-latest-read">Read the answer</button>';
+
+      var readButton = $('#home-latest-read');
+      if (readButton) {
+        readButton.addEventListener('click', function () {
+          activateTab('qa');
+          showAnswer({
+            question: item.question,
+            text: item.text,
+            eyebrow: item.eyebrow,
+            meta: item.meta
+          });
+        });
+      }
+    } else {
+      homeLatest.innerHTML = '<p class="home-side-empty">No answers yet. Ask the first question above.</p>';
+    }
+
+    var answers = ADM.seedQA.length + (ADM.auth.getUser() ? accountAnswers.length : history.length);
+    var answerStat = $('#home-stat-answers');
+    var clubStat = $('#home-stat-clubs');
+    var serviceStat = $('#home-stat-services');
+    if (answerStat) answerStat.textContent = String(answers);
+    if (clubStat) clubStat.textContent = String(ADM.clubs.length);
+    if (serviceStat) serviceStat.textContent = String(ADM.services.length);
+
+    if (homeNews) {
+      homeNews.innerHTML = ADM.news.slice(0, 2).map(function (item) {
+        return (
+          '<li class="news-item">' +
+            '<time datetime="' + escapeHtml(item.date) + '">' + escapeHtml(formatDate(item.date, true)) + '</time>' +
+            '<h3>' + escapeHtml(item.title) + '</h3>' +
+            '<p>' + escapeHtml(item.body) + '</p>' +
+          '</li>'
+        );
+      }).join('');
+    }
+  }
+
+  if (homeAsk) {
+    homeAsk.addEventListener('click', function () {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      heroInput.focus({ preventScroll: true });
+    });
+  }
+
+  document.addEventListener('click', function (event) {
+    var target = event.target.closest('[data-goto]');
+    if (!target) return;
+    var name = target.getAttribute('data-goto');
+    if (TAB_NAMES.indexOf(name) < 0) return;
+    activateTab(name);
+    if (name === 'qa') showQAList(false);
+  });
 
   if (qaList) {
     qaList.addEventListener('click', function (event) {
@@ -1067,12 +1172,12 @@
 
   /* ----------------------------------------------------------------- init */
 
-  renderLetter();
   renderClubs();
   renderNews();
   renderServices();
   renderGuidelines();
   renderQAList();
+  renderHome();
   applyAccount(ADM.auth.getUser());
   ADM.auth.restore().then(function (user) {
     if (user) applyAccount(user);
